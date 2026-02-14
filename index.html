@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Cyberpunk YouTube Stream Viz</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="ui-container">
+        <div class="panel">
+            <h1>STREAM VIZ // 2077</h1>
+            <div class="input-group">
+                <label>VIDEO ID</label>
+                <input type="text" id="video-id" placeholder="jfKfPfyJRdk" value="jfKfPfyJRdk">
+            </div>
+            <div class="input-group">
+                <label>API KEY</label>
+                <input type="password" id="api-key" placeholder="AIzaSy..." value="">
+            </div>
+            <div class="controls">
+                <button id="btn-connect">CONNECT</button>
+                <button id="btn-fake">DEMO MODE (FAKE DATA)</button>
+            </div>
+            <div id="status">READY</div>
+        </div>
+    </div>
+    <div id="canvas-container"></div>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
