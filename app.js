@@ -416,9 +416,18 @@ class UserBox {
         // 7. Trail System
         this.trailPoints = [];
         this.lastTrailTime = 0;
+
+        // 8. Scale
+        this.targetScale = 1.0;
+        this.currentScale = 1.0;
     }
 
     updateTexture() {
+        // Update Target Scale based on count
+        const count = this.user.timestamps.length;
+        // Base scale 1.0, +0.1 per comment, max 2.5x
+        this.targetScale = 1.0 + Math.min((count - 1) * 0.15, 1.5);
+
         const ctx = this.ctx;
         const w = this.canvas.width;
         const h = this.canvas.height;
@@ -482,6 +491,10 @@ class UserBox {
     }
 
     update(time) {
+        // Smooth Scale Transition
+        this.currentScale += (this.targetScale - this.currentScale) * 0.1;
+        this.group.scale.set(this.currentScale, this.currentScale, this.currentScale);
+
         const t = time + this.timeOffset;
 
         if (this.movementType === 0) { // Wander / Bounce
