@@ -138,6 +138,10 @@ function animate() {
         }
     }
 
+    if (window.commentLog) {
+        window.commentLog.update(time);
+    }
+
     composer.render();
 }
 
@@ -305,6 +309,14 @@ class DataManager {
                 this.createUserVisuals(newUser);
                 if (window.audioManager) window.audioManager.playGlitch();
             }
+
+            // Add to Ladder Log (for both new and existing users if they comment)
+            if (this.activeUsers.has(userId)) {
+                 const u = this.activeUsers.get(userId);
+                 // We don't have msg.snippet.displayMessage here directly in the loop above?
+                 // Wait, 'msg' is in scope.
+                 this.addCommentToLadder(msg.snippet.displayMessage, u.box ? u.box.userColor : '#ffffff');
+            }
         });
     }
 
@@ -341,6 +353,13 @@ class DataManager {
     updateUserVisuals(user) {
         if (user.box) {
             user.box.updateTexture();
+        }
+    }
+
+    // Helper to add latest message to ladder
+    addCommentToLadder(text, color) {
+        if (window.commentLog) {
+            window.commentLog.add(text, color);
         }
     }
 
@@ -387,12 +406,11 @@ class UserBox {
             map: this.texture,
             transparent: true,
             opacity: 1.0, // Ensure full opacity
-            side: THREE.FrontSide // Ensure text reads correctly
+            side: THREE.DoubleSide // Plane needs double side to be seen if rotation flips
         });
 
-        // Use RoundedBoxGeometry instead of BoxGeometry
-        // 50% radius: Height is 2.4, so radius ~1.2
-        const geometry = new RoundedBoxGeometry(this.width, this.height, this.depth, 4, 1.2);
+        // Use PlaneGeometry instead of Box to eliminate "rectangle border" artifacts from depth
+        const geometry = new THREE.PlaneGeometry(this.width, this.height);
         this.mesh = new THREE.Mesh(geometry, material);
         this.group.add(this.mesh);
 
@@ -738,7 +756,110 @@ class UserBox {
         this.mesh.material.dispose();
     }
 }
-init();
+
+// --- COMMENT LOG LADDER ---
+class CommentLog {
+    constructor(scene) {
+        this.scene = scene;
+        this.messages = []; // { mesh, startTime, text }
+    }
+
+    add(text, color) {
+        // Create canvas texture for text
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 1024;
+        canvas.height = 128;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.0)'; // Transparent background
+        ctx.clearRect(0,0, 1024, 128);
+
+        // Glow effect
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = color;
+        ctx.font = 'bold 60px Orbitron';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text.substring(0, 50), 512, 64);
+
+        const tex = new THREE.CanvasTexture(canvas);
+        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 1.0 });
+        const sprite = new THREE.Sprite(mat);
+
+        // Start Position: Bottom Center, slightly back
+        // Screen height ~40 units visible?
+        // y=-25 is below screen.
+        sprite.position.set(0, -35, -20);
+        sprite.scale.set(40, 5, 1); // Wide aspect ratio
+
+        this.scene.add(sprite);
+        this.messages.push({
+            mesh: sprite,
+            created: clock.getElapsedTime(),
+            color: color
+        });
+    }
+
+    update(time) {
+        // Animate up
+        // Ladder effect: Bottom = Wide/Large. Top = Small/Short.
+        // We simulate this by moving them UP and BACK (Z).
+
+        // Keep last 20 messages?
+
+        for (let i = this.messages.length - 1; i >= 0; i--) {
+            const m = this.messages[i];
+            const age = time - m.created;
+
+            // Speed: fast at first?
+            // Target: Top (y=20), Back (z=-100)
+
+            // Linear progress?
+            const life = 10.0; // Seconds to reach top/die
+            const p = age / life;
+
+            if (p >= 1.0) {
+                this.scene.remove(m.mesh);
+                m.mesh.material.map.dispose();
+                m.mesh.material.dispose();
+                this.messages.splice(i, 1);
+                continue;
+            }
+
+            // Movement: Ladder to Heaven
+            // Start: 0, -35, -20
+            // End:   0,  15, -80  (25% from top? Top is ~20-30 depending on FOV)
+
+            const startY = -35;
+            const endY = 15;
+            const startZ = -20;
+            const endZ = -80;
+
+            m.mesh.position.y = startY + (endY - startY) * p;
+            m.mesh.position.z = startZ + (endZ - startZ) * p;
+
+            // Scale: Wide at bottom, Small at top
+            // Sprite perspective handles some, but let's enforce "ladder" taper
+            // At bottom (p=0), scale = 1. At top (p=1), scale = 0.5
+            const s = 1.0 - (p * 0.5);
+            m.mesh.scale.set(40 * s, 5 * s, 1);
+
+            // Fade out near top
+            if (p > 0.8) {
+                m.mesh.material.opacity = 1.0 - ((p - 0.8) / 0.2);
+            }
+        }
+    }
+}
+
+// Init logic wrapper
+function initApp() {
+    init();
+    window.commentLog = new CommentLog(scene);
+}
+
+initApp();
 
 // --- UI LOGIC ---
 let pollingInterval = null;
