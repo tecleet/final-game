@@ -440,23 +440,26 @@ class UserBox {
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        // Add subtle shadow for pop
-        ctx.shadowColor = 'rgba(0, 255, 255, 0.5)';
-        ctx.shadowBlur = 10;
-        ctx.fillText(this.user.username.substring(0, 15), 240, h / 2); // Adjusted x for avatar
+        // No shadow for cleaner text
+        ctx.shadowBlur = 0;
+        // Truncate to 7 chars max
+        const truncatedName = this.user.username.length > 7
+            ? this.user.username.substring(0, 7) + '.'
+            : this.user.username;
+        ctx.fillText(truncatedName.toUpperCase(), 240, h / 2); // Adjusted x for avatar
 
         // Text - Count (Big & Neon)
         ctx.font = 'bold 160px Orbitron, sans-serif'; // HUGE count
         ctx.fillStyle = '#ff00ff';
         ctx.textAlign = 'right';
         ctx.shadowColor = '#ff00ff';
-        ctx.shadowBlur = 30; // Strong glow
+        ctx.shadowBlur = 20; // Moderate glow
         ctx.fillText(this.user.timestamps.length, w - 60, h / 2 + 20);
 
         // Reset Shadow
         ctx.shadowBlur = 0;
 
-        // Avatar Placeholder (Circle)
+        // Avatar Placeholder (Circle) - LEFT
         const avatarX = 120;
         const avatarY = h / 2;
         const avatarR = 80;
@@ -579,14 +582,20 @@ function setupUI() {
     const inputApiKey = document.getElementById('api-key');
     const statusDiv = document.getElementById('status');
     const panel = document.querySelector('.panel');
+    const btnToggle = document.getElementById('btn-toggle-ui');
 
     const savedKey = localStorage.getItem('yt_api_key');
     if (savedKey) inputApiKey.value = savedKey;
 
+    // Toggle Button Logic
+    btnToggle.addEventListener('click', () => {
+        panel.classList.toggle('hidden');
+    });
+
     btnFake.addEventListener('click', () => {
         statusDiv.textContent = "MODE: DEMO (FAKE DATA)";
         statusDiv.style.color = "#bc13fe";
-        panel.classList.add('hidden');
+        panel.classList.add('hidden'); // Auto-hide on start
 
         if (pollingInterval) clearTimeout(pollingInterval);
 
