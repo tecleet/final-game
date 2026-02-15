@@ -149,6 +149,12 @@ class YouTubeClient {
         const url = `${this.baseUrl}/videos?part=liveStreamingDetails&id=${videoId}&key=${this.apiKey}`;
         try {
             const response = await fetch(url);
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error?.message || `API Error: ${response.status} ${response.statusText}`);
+            }
+
             const data = await response.json();
             if (data.items && data.items.length > 0) {
                 const details = data.items[0].liveStreamingDetails;
@@ -162,6 +168,9 @@ class YouTubeClient {
             }
         } catch (error) {
             console.error("Error fetching Live Chat ID:", error);
+            if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+                throw new Error("Network/CORS Error: Check API Key restrictions (allow localhost) or internet connection.");
+            }
             throw error;
         }
     }
@@ -174,6 +183,16 @@ class YouTubeClient {
 
         try {
             const response = await fetch(url);
+
+            if (!response.ok) {
+                // If 404/403, might be stream ended or quota
+                if (response.status === 404) {
+                     throw new Error("Live Stream Ended or Invalid Chat ID.");
+                }
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error?.message || `API Error: ${response.status} ${response.statusText}`);
+            }
+
             const data = await response.json();
 
             if (data.error) {
@@ -187,6 +206,10 @@ class YouTubeClient {
             };
         } catch (error) {
             console.error("Error fetching messages:", error);
+            if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+                 // Often happens if 404 response lacks CORS headers
+                 throw new Error("Network/CORS Error: Stream might be offline or API Key restrictions block localhost.");
+            }
             throw error;
         }
     }

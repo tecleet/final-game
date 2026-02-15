@@ -38,3 +38,22 @@ Since you are on a Mac, Python is likely pre-installed. Follow these steps:
 - **Dynamic Scaling:** Boxes grow larger as users comment more.
 - **Cyberpunk Aesthetics:** Neon glow, bloom, and particle effects.
 - **Audio:** Glitch/Ping sounds on activity.
+
+---
+
+## Troubleshooting
+
+### API Connection Issues
+
+If you see errors in the console or the app doesn't connect:
+
+1.  **CORS Errors / 403 Forbidden:**
+    *   **API Key Restrictions:** If you restricted your API key to specific HTTP referrers, ensure you have added `http://localhost:8000` (or whatever port you are using) to the allowed list in the Google Cloud Console.
+    *   **Browser Extensions:** Sometimes ad-blockers or privacy extensions can interfere with API requests.
+
+2.  **404 Not Found:**
+    *   **Video ID:** Double-check the Video ID. It must be for a **currently live** stream. Past livestreams (VODs) will not work with the Live Chat API endpoint used here.
+    *   **Stream Offline:** The streamer may have ended the broadcast.
+
+3.  **Quota Exceeded (403):**
+    *   The YouTube Data API has a daily quota. This app polls frequently. If you hit the limit, you will need to wait until the next day (Pacific Time) or use a different API key.
