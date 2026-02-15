@@ -6,12 +6,12 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 // --- CONFIGURATION ---
 const CONFIG = {
     PARTICLE_COUNT: 1000,
-    BLOOM_STRENGTH: 1.5,
-    BLOOM_RADIUS: 0.4,
+    BLOOM_STRENGTH: 1.2, // Slightly reduced to avoid text washout
+    BLOOM_RADIUS: 0.5,
     BLOOM_THRESHOLD: 0,
     FOV: 60,
-    CAMERA_Z: 50,
-    COLORS: [0x00ffff, 0xff00ff, 0xbc13fe] // Cyan, Magenta, Purple
+    CAMERA_Z: 60, // Pulled back slightly for more view
+    COLORS: [0x00ffff, 0xff00ff, 0xbc13fe, 0x00ffaa] // Added Neon Green
 };
 
 // --- GLOBALS ---
@@ -23,14 +23,14 @@ const clock = new THREE.Clock();
 function init() {
     // 1. Scene
     scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x050505, 0.002); // Cyberpunk fog
+    scene.fog = new THREE.FogExp2(0x050505, 0.0015); // Cyberpunk fog
 
     // 2. Camera
     camera = new THREE.PerspectiveCamera(CONFIG.FOV, window.innerWidth / window.innerHeight, 1, 1000);
     camera.position.z = CONFIG.CAMERA_Z;
 
     // 3. Renderer
-    renderer = new THREE.WebGLRenderer({ antialias: false }); // Post-processing handles AA usually, or disable for performance
+    renderer = new THREE.WebGLRenderer({ antialias: false });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setClearColor(0x050505);
@@ -51,7 +51,7 @@ function init() {
     // 5. Background Particles
     createParticles();
 
-    // 6. Lights (Ambient + Directional for depth)
+    // 6. Lights
     const ambientLight = new THREE.AmbientLight(0x404040);
     scene.add(ambientLight);
 
@@ -69,18 +69,14 @@ function createParticles() {
     const geometry = new THREE.BufferGeometry();
     const positions = [];
     const colors = [];
-
     const color = new THREE.Color();
 
     for (let i = 0; i < CONFIG.PARTICLE_COUNT; i++) {
-        // Random position in a large box
         const x = (Math.random() - 0.5) * 200;
         const y = (Math.random() - 0.5) * 200;
-        const z = (Math.random() - 0.5) * 100 - 50; // Push slightly back
-
+        const z = (Math.random() - 0.5) * 100 - 50;
         positions.push(x, y, z);
 
-        // Random cyberpunk color
         color.setHex(CONFIG.COLORS[Math.floor(Math.random() * CONFIG.COLORS.length)]);
         colors.push(color.r, color.g, color.b);
     }
@@ -112,13 +108,11 @@ function animate() {
 
     const time = clock.getElapsedTime();
 
-    // Rotate particles slowly
     if (particles) {
         particles.rotation.y += 0.0005;
         particles.rotation.x += 0.0002;
     }
 
-    // Update active user boxes
     if (dataManager) {
         dataManager.activeUsers.forEach(user => {
             if (user.box) {
@@ -126,17 +120,13 @@ function animate() {
             }
         });
 
-        // Periodic cleanup (every ~1s is enough, but per frame is fine for < 50 items)
-        if (Math.floor(time) % 2 === 0) { // Every second roughly
+        if (Math.floor(time) % 2 === 0) {
              dataManager.cleanupCounts();
         }
     }
 
     composer.render();
 }
-
-// Start
-// moved to end
 
 // --- YOUTUBE API CLIENT ---
 class YouTubeClient {
@@ -185,7 +175,6 @@ class YouTubeClient {
             const response = await fetch(url);
 
             if (!response.ok) {
-                // If 404/403, might be stream ended or quota
                 if (response.status === 404) {
                      throw new Error("Live Stream Ended or Invalid Chat ID.");
                 }
@@ -207,7 +196,6 @@ class YouTubeClient {
         } catch (error) {
             console.error("Error fetching messages:", error);
             if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-                 // Often happens if 404 response lacks CORS headers
                  throw new Error("Network/CORS Error: Stream might be offline or API Key restrictions block localhost.");
             }
             throw error;
@@ -226,10 +214,10 @@ class FakeDataGenerator {
     start(callback) {
         this.stop();
         const loop = () => {
-            const delay = Math.random() * 2000 + 500; // 0.5s to 2.5s
+            const delay = Math.random() * 2000 + 500;
             this.interval = setTimeout(() => {
                 const msg = this.generateMessage();
-                callback([msg]); // Return array to match API format
+                callback([msg]);
                 loop();
             }, delay);
         };
@@ -242,7 +230,6 @@ class FakeDataGenerator {
 
     generateMessage() {
         const username = this.usernames[Math.floor(Math.random() * this.usernames.length)];
-        // Create a persistent user ID based on username for consistent tracking in demo
         const userId = 'user_' + username.toLowerCase();
         const comment = this.comments[Math.floor(Math.random() * this.comments.length)];
 
@@ -254,7 +241,7 @@ class FakeDataGenerator {
             authorDetails: {
                 channelId: userId,
                 displayName: username,
-                profileImageUrl: 'https://robohash.org/' + userId + '?set=set2&size=64x64', // Generative avatar
+                profileImageUrl: 'https://robohash.org/' + userId + '?set=set2&size=64x64',
                 isChatOwner: Math.random() > 0.9,
                 isChatModerator: Math.random() > 0.95
             }
@@ -265,8 +252,8 @@ class FakeDataGenerator {
 // --- DATA MANAGER ---
 class DataManager {
     constructor() {
-        this.activeUsers = new Map(); // userId -> { userId, username, avatar, timestamps: [], box: null, insertedAt: number }
-        this.userOrder = []; // List of userIds in order of insertion (FIFO)
+        this.activeUsers = new Map();
+        this.userOrder = [];
         this.maxUsers = 50;
         this.windowSeconds = 60;
     }
@@ -278,22 +265,15 @@ class DataManager {
             const userId = msg.authorDetails.channelId;
             const username = msg.authorDetails.displayName;
             const avatar = msg.authorDetails.profileImageUrl;
-            const publishedAt = new Date(msg.snippet.publishedAt).getTime(); // Use API time or Date.now() if simulating
 
             if (this.activeUsers.has(userId)) {
-                // Existing user
                 const user = this.activeUsers.get(userId);
-                user.timestamps.push(now); // Add current time for the count window
-                user.username = username; // Update just in case
+                user.timestamps.push(now);
+                user.username = username;
                 user.avatar = avatar;
-
-                // Visual update triggers
                 this.updateUserVisuals(user);
-
-                // Audio
                 if (window.audioManager) window.audioManager.playPing();
             } else {
-                // New user
                 if (this.userOrder.length >= this.maxUsers) {
                     this.removeOldestUser();
                 }
@@ -303,17 +283,13 @@ class DataManager {
                     username,
                     avatar,
                     timestamps: [now],
-                    box: null, // Will be created
+                    box: null,
                     insertedAt: now
                 };
 
                 this.activeUsers.set(userId, newUser);
                 this.userOrder.push(userId);
-
-                // Create visual
                 this.createUserVisuals(newUser);
-
-                // Audio
                 if (window.audioManager) window.audioManager.playGlitch();
             }
         });
@@ -326,15 +302,14 @@ class DataManager {
         this.activeUsers.forEach(user => {
             const originalCount = user.timestamps.length;
             user.timestamps = user.timestamps.filter(t => t > cutoff);
-
             if (user.timestamps.length !== originalCount) {
-                this.updateUserVisuals(user); // Update count display if changed
+                this.updateUserVisuals(user);
             }
         });
     }
 
     removeOldestUser() {
-        const oldestUserId = this.userOrder.shift(); // Remove first
+        const oldestUserId = this.userOrder.shift();
         if (oldestUserId) {
             const user = this.activeUsers.get(oldestUserId);
             if (user) {
@@ -344,7 +319,6 @@ class DataManager {
         }
     }
 
-    // Visual Management
     createUserVisuals(user) {
         if (scene) {
             user.box = new UserBox(user, scene);
@@ -354,7 +328,6 @@ class DataManager {
     updateUserVisuals(user) {
         if (user.box) {
             user.box.updateTexture();
-            // Optional: Add a pulse effect or highlight
         }
     }
 
@@ -368,7 +341,7 @@ class DataManager {
 
 const dataManager = new DataManager();
 
-// --- USER BOX VISUALIZATION ---
+// --- USER BOX VISUALIZATION (IMPROVED) ---
 class UserBox {
     constructor(user, scene) {
         this.user = user;
@@ -380,24 +353,26 @@ class UserBox {
         this.height = 2.4;
         this.depth = 0.2;
 
-        // 1. Main Panel Mesh
-        const geometry = new THREE.BoxGeometry(this.width, this.height, this.depth);
+        // 1. High-Res Canvas for Crisp Text
         this.canvas = document.createElement('canvas');
-        this.canvas.width = 512;
-        this.canvas.height = 175; // Aspect ratio matches box
+        this.canvas.width = 1024; // 2x resolution
+        this.canvas.height = 350;
         this.ctx = this.canvas.getContext('2d');
 
         this.texture = new THREE.CanvasTexture(this.canvas);
         this.texture.minFilter = THREE.LinearFilter;
-        this.texture.magFilter = THREE.LinearFilter;
+        this.texture.magFilter = THREE.LinearFilter; // Smooth scaling
 
+        // Use MeshBasicMaterial with Emissive map if possible, but texture map is emissive enough
+        // Using BasicMaterial ensures it ignores lighting and glows with bloom
         const material = new THREE.MeshBasicMaterial({
             map: this.texture,
             transparent: true,
-            opacity: 0.9,
+            opacity: 1.0, // Ensure full opacity
             side: THREE.DoubleSide
         });
 
+        const geometry = new THREE.BoxGeometry(this.width, this.height, this.depth);
         this.mesh = new THREE.Mesh(geometry, material);
         this.group.add(this.mesh);
 
@@ -406,29 +381,27 @@ class UserBox {
         const borderMaterial = new THREE.LineBasicMaterial({
             color: 0x00ffff,
             transparent: true,
-            opacity: 0.8,
+            opacity: 0.9,
             linewidth: 2
         });
         this.border = new THREE.LineSegments(edges, borderMaterial);
         this.group.add(this.border);
 
-        // 3. Initial Position (Random)
+        // 3. Initial Position & Movement Setup (Improved)
+        // Spread across wider area
         this.group.position.set(
+            (Math.random() - 0.5) * 60,
             (Math.random() - 0.5) * 40,
-            (Math.random() - 0.5) * 20,
-            (Math.random() - 0.5) * 20
+            (Math.random() - 0.5) * 30
         );
 
-        // 4. Movement State
-        this.velocity = new THREE.Vector3(
-            (Math.random() - 0.5) * 0.1,
-            (Math.random() - 0.5) * 0.1,
-            (Math.random() - 0.5) * 0.1
-        );
-        this.movementType = Math.floor(Math.random() * 3); // 0: Wander, 1: Orbit, 2: Sine
-        this.timeOffset = Math.random() * 100;
-        this.orbitRadius = 15 + Math.random() * 15;
-        this.orbitSpeed = (Math.random() - 0.5) * 0.02;
+        // Complex Movement using Simplex-like Logic
+        this.seed = Math.random() * 1000;
+        this.speed = 0.3 + Math.random() * 0.5; // Varied speed
+
+        // Target Scale
+        this.targetScale = 1.0;
+        this.currentScale = 1.0;
 
         // 5. Add to Scene
         scene.add(this.group);
@@ -439,54 +412,61 @@ class UserBox {
         // 7. Trail System
         this.trailPoints = [];
         this.lastTrailTime = 0;
-
-        // 8. Scale
-        this.targetScale = 1.0;
-        this.currentScale = 1.0;
     }
 
     updateTexture() {
-        // Update Target Scale based on count
         const count = this.user.timestamps.length;
-        // Base scale 1.0, +0.1 per comment, max 2.5x
         this.targetScale = 1.0 + Math.min((count - 1) * 0.15, 1.5);
 
         const ctx = this.ctx;
         const w = this.canvas.width;
         const h = this.canvas.height;
 
-        // Background
-        ctx.fillStyle = 'rgba(10, 10, 20, 0.8)';
+        // Clear
+        ctx.clearRect(0, 0, w, h);
+
+        // Background - Darker for better contrast
+        ctx.fillStyle = 'rgba(5, 5, 10, 0.95)'; // Near opaque black/blue
         ctx.fillRect(0, 0, w, h);
 
         // Border Glow Effect (Inner)
         ctx.strokeStyle = '#00ffff';
-        ctx.lineWidth = 4;
-        ctx.strokeRect(0, 0, w, h);
+        ctx.lineWidth = 10; // Thicker line for high-res
+        ctx.strokeRect(5, 5, w-10, h-10);
 
         // Text - Username
-        ctx.font = 'bold 40px Orbitron, sans-serif';
+        // Bolder, larger font
+        ctx.font = 'bold 80px Orbitron, sans-serif';
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(this.user.username.substring(0, 15), 110, h / 2);
+        // Add subtle shadow for pop
+        ctx.shadowColor = 'rgba(0, 255, 255, 0.5)';
+        ctx.shadowBlur = 10;
+        ctx.fillText(this.user.username.substring(0, 15), 240, h / 2); // Adjusted x for avatar
 
         // Text - Count (Big & Neon)
-        ctx.font = 'bold 80px Orbitron, sans-serif';
+        ctx.font = 'bold 160px Orbitron, sans-serif'; // HUGE count
         ctx.fillStyle = '#ff00ff';
         ctx.textAlign = 'right';
         ctx.shadowColor = '#ff00ff';
-        ctx.shadowBlur = 20;
-        ctx.fillText(this.user.timestamps.length, w - 30, h / 2 + 10);
+        ctx.shadowBlur = 30; // Strong glow
+        ctx.fillText(this.user.timestamps.length, w - 60, h / 2 + 20);
+
+        // Reset Shadow
         ctx.shadowBlur = 0;
 
         // Avatar Placeholder (Circle)
+        const avatarX = 120;
+        const avatarY = h / 2;
+        const avatarR = 80;
+
         ctx.beginPath();
-        ctx.arc(60, h / 2, 40, 0, Math.PI * 2);
+        ctx.arc(avatarX, avatarY, avatarR, 0, Math.PI * 2);
         ctx.fillStyle = '#333';
         ctx.fill();
         ctx.strokeStyle = '#00ffff';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 4;
         ctx.stroke();
 
         // Load Avatar Image (Async)
@@ -497,20 +477,25 @@ class UserBox {
             img.onload = () => {
                 this.avatarImg = img;
                 this.avatarLoaded = true;
-                this.updateTexture(); // Redraw with image
+                this.updateTexture();
             };
         }
 
         if (this.avatarLoaded && this.avatarImg) {
             ctx.save();
             ctx.beginPath();
-            ctx.arc(60, h / 2, 40, 0, Math.PI * 2);
+            ctx.arc(avatarX, avatarY, avatarR, 0, Math.PI * 2);
             ctx.clip();
-            ctx.drawImage(this.avatarImg, 20, h / 2 - 40, 80, 80);
+            ctx.drawImage(this.avatarImg, avatarX - avatarR, avatarY - avatarR, avatarR * 2, avatarR * 2);
             ctx.restore();
         }
 
         this.texture.needsUpdate = true;
+    }
+
+    // Simple pseudo-noise function
+    noise(x, y) {
+        return Math.sin(x * 12.9898 + y * 78.233) * 43758.5453 % 1;
     }
 
     update(time) {
@@ -518,46 +503,31 @@ class UserBox {
         this.currentScale += (this.targetScale - this.currentScale) * 0.1;
         this.group.scale.set(this.currentScale, this.currentScale, this.currentScale);
 
-        const t = time + this.timeOffset;
+        // ORGANIC MOVEMENT (Perlin-ish)
+        // We use sine waves of different frequencies to simulate wandering
+        const t = time * this.speed + this.seed;
 
-        if (this.movementType === 0) { // Wander / Bounce
-            this.group.position.add(this.velocity);
+        // Calculate new position based on multiple sine waves (Lissajous-like but chaotic)
+        const targetX = Math.sin(t * 0.3) * 50 + Math.cos(t * 0.7) * 20;
+        const targetY = Math.cos(t * 0.4) * 30 + Math.sin(t * 1.1) * 10;
+        const targetZ = Math.sin(t * 0.2) * 20 - 10; // Depth variation
 
-            // Bounce
-            if (this.group.position.x > 35 || this.group.position.x < -35) this.velocity.x *= -1;
-            if (this.group.position.y > 20 || this.group.position.y < -20) this.velocity.y *= -1;
-            if (this.group.position.z > 10 || this.group.position.z < -20) this.velocity.z *= -1; // Adjusted Z back limit
-
-        } else if (this.movementType === 1) { // Orbit
-            this.group.position.x = Math.cos(t * this.orbitSpeed) * this.orbitRadius;
-            this.group.position.z = Math.sin(t * this.orbitSpeed) * this.orbitRadius - 20;
-            this.group.position.y += Math.sin(t * 0.5) * 0.05; // Bobbing
-
-        } else if (this.movementType === 2) { // Sine / Snake
-            this.group.position.x += this.velocity.x;
-            if (this.group.position.x > 40) this.group.position.x = -40;
-            if (this.group.position.x < -40) this.group.position.x = 40;
-
-            this.group.position.y = Math.sin(this.group.position.x * 0.2 + t) * 10;
-        }
-
-        // Randomly switch patterns occasionally
-        if (Math.random() < 0.001) {
-             this.movementType = (this.movementType + 1) % 3;
-        }
+        // Smoothly interpolate current position to target (Damping)
+        this.group.position.x += (targetX - this.group.position.x) * 0.02;
+        this.group.position.y += (targetY - this.group.position.y) * 0.02;
+        this.group.position.z += (targetZ - this.group.position.z) * 0.02;
 
         // Face camera
         this.group.lookAt(camera.position);
 
         // Spawn Trail Particle
-        if (time - this.lastTrailTime > 0.1) {
+        if (time - this.lastTrailTime > 0.08) {
              this.spawnTrailParticle();
              this.lastTrailTime = time;
         }
     }
 
     spawnTrailParticle() {
-        // Simple particle that fades
         const geo = new THREE.PlaneGeometry(0.5, 0.5);
         const mat = new THREE.MeshBasicMaterial({
             color: this.border.material.color,
@@ -566,14 +536,17 @@ class UserBox {
             side: THREE.DoubleSide
         });
         const mesh = new THREE.Mesh(geo, mat);
+
+        // Spawn slightly behind box
         mesh.position.copy(this.group.position);
+        mesh.position.z -= 0.5;
+
         mesh.lookAt(camera.position);
         scene.add(mesh);
 
-        // Animate fading
         const fade = () => {
             mat.opacity -= 0.02;
-            mesh.scale.multiplyScalar(0.95);
+            mesh.scale.multiplyScalar(0.92);
             if (mat.opacity <= 0) {
                 scene.remove(mesh);
                 geo.dispose();
@@ -607,7 +580,6 @@ function setupUI() {
     const statusDiv = document.getElementById('status');
     const panel = document.querySelector('.panel');
 
-    // Load saved API Key
     const savedKey = localStorage.getItem('yt_api_key');
     if (savedKey) inputApiKey.value = savedKey;
 
@@ -616,7 +588,6 @@ function setupUI() {
         statusDiv.style.color = "#bc13fe";
         panel.classList.add('hidden');
 
-        // Stop any existing polling
         if (pollingInterval) clearTimeout(pollingInterval);
 
         const generator = new FakeDataGenerator();
@@ -635,13 +606,11 @@ function setupUI() {
             return;
         }
 
-        // Save API Key
         localStorage.setItem('yt_api_key', apiKey);
 
         statusDiv.textContent = "CONNECTING...";
         statusDiv.style.color = "#0ff";
 
-        // Stop any existing polling
         if (pollingInterval) clearTimeout(pollingInterval);
 
         const client = new YouTubeClient(apiKey);
@@ -669,7 +638,6 @@ function setupUI() {
                     console.error(err);
                     statusDiv.textContent = "ERROR: " + err.message;
                     statusDiv.style.color = "red";
-                    // Retry after delay
                     pollingInterval = setTimeout(poll, 10000);
                 }
             };
@@ -688,7 +656,7 @@ class AudioManager {
     constructor() {
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.value = 0.1; // Low volume
+        this.masterGain.gain.value = 0.1;
         this.masterGain.connect(this.ctx.destination);
     }
 
