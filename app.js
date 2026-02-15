@@ -774,96 +774,112 @@ class CommentLog {
         canvas.width = 1024;
         canvas.height = 128;
 
-        ctx.fillStyle = 'rgba(0,0,0,0.0)'; // Transparent background
         ctx.clearRect(0,0, 1024, 128);
 
-        // Glow effect
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 10;
-        ctx.fillStyle = color;
-        ctx.font = 'bold 60px Orbitron';
+        // Dark Background Plate for Readability
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.beginPath();
+        // Rounded rect centered
+        const plateW = 900;
+        const plateH = 100;
+        const radius = 40;
+        const x = (1024 - plateW) / 2;
+        const y = (128 - plateH) / 2;
+
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + plateW - radius, y);
+        ctx.quadraticCurveTo(x + plateW, y, x + plateW, y + radius);
+        ctx.lineTo(x + plateW, y + plateH - radius);
+        ctx.quadraticCurveTo(x + plateW, y + plateH, x + plateW - radius, y + plateH);
+        ctx.lineTo(x + radius, y + plateH);
+        ctx.quadraticCurveTo(x, y + plateH, x, y + plateH - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+        ctx.fill();
+
+        // Text Settings
+        ctx.font = 'bold 50px Orbitron';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
+
+        // Stroke for contrast
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 4;
+        ctx.strokeText(text.substring(0, 50), 512, 64);
+
+        // Main Text (No Shadow/Bloom on texture to avoid "too much light")
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = color;
         ctx.fillText(text.substring(0, 50), 512, 64);
 
         const tex = new THREE.CanvasTexture(canvas);
-        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 1.0 });
+        tex.minFilter = THREE.LinearFilter;
+        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0 }); // Start invisible, fade in
         const sprite = new THREE.Sprite(mat);
 
-        // Start Position: Bottom Center, DEEP BACKGROUND
-        // UserBoxes go back to z=-40. We start at -60 to ensure no overlap.
-        // Perspective scaling: Further away = smaller, so we scale UP.
-
-        const startZ = -60;
-        const scaleFactor = 2.5; // Compensate for depth
-
-        sprite.position.set(0, -50, startZ); // Start lower (-50) to account for distance
-        sprite.scale.set(40 * scaleFactor, 5 * scaleFactor, 1);
+        // Initial spawn position (will be overridden by update)
+        sprite.position.set(0, -60, -60);
 
         this.scene.add(sprite);
-        this.messages.push({
+
+        // Add to BEGINNING of array (Stack bottom)
+        this.messages.unshift({
             mesh: sprite,
             created: clock.getElapsedTime(),
             color: color
         });
+
+        // Limit Stack Size
+        if (this.messages.length > 20) {
+            const removed = this.messages.pop();
+            this.disposeMessage(removed);
+        }
     }
 
     update(time) {
-        // Animate up
-        // Ladder effect: Bottom = Wide/Large. Top = Small/Short.
-        // We simulate this by moving them UP and BACK (Z).
+        // Stack Logic: Position based on Index
+        // Index 0 is newest (Bottom)
+        // Index N is oldest (Top/Back)
 
-        // Keep last 20 messages?
+        const spacingY = 8; // Vertical gap
+        const spacingZ = 5; // Depth gap
+        const baseY = -45;
+        const baseZ = -60;
 
-        for (let i = this.messages.length - 1; i >= 0; i--) {
-            const m = this.messages[i];
-            const age = time - m.created;
+        this.messages.forEach((m, index) => {
+            // Target Positions
+            const targetY = baseY + (index * spacingY);
+            const targetZ = baseZ - (index * spacingZ);
 
-            // Speed: fast at first?
-            // Target: Top (y=20), Back (z=-100)
+            // Lerp Position
+            m.mesh.position.y += (targetY - m.mesh.position.y) * 0.1;
+            m.mesh.position.z += (targetZ - m.mesh.position.z) * 0.1;
 
-            // Linear progress?
-            const life = 15.0; // Slower ascent (longer life) to decrease space/stack more
-            const p = age / life;
+            // Scale Calculation
+            // Shrink as index increases (further back)
+            // Base scale 2.5x (from previous tweak)
+            const baseScale = 2.5;
+            const scaleDecay = 0.05; // 5% smaller per step
+            const s = Math.max(0.1, 1.0 - (index * scaleDecay));
 
-            // Flood Control: If too many messages, kill old ones faster or hard limit
-            if (this.messages.length > 50 && i < this.messages.length - 50) {
-                 // Force expire oldest if over limit
-                 this.removeMessage(i);
-                 continue;
-            }
+            m.mesh.scale.set(40 * baseScale * s, 5 * baseScale * s, 1);
 
-            if (p >= 1.0) {
-                this.removeMessage(i);
-                continue;
-            }
+            // Fade In/Out
+            // Fade in if new (opacity < 1)
+            // Fade out if near limit
+            let targetOpacity = 1.0;
+            if (index > 15) targetOpacity = 0; // Fade out top 5
 
-            // Movement: Ladder to Heaven
-            // Start: 0, -50, -60
-            // End:   0,  60, -150  (Deeper and Higher)
+            m.mesh.material.opacity += (targetOpacity - m.mesh.material.opacity) * 0.1;
+        });
+    }
 
-            const startY = -50;
-            const endY = 60;
-            const startZ = -60;
-            const endZ = -150;
-
-            // Use quadratic easing for "ladder" feel (start fast, slow at top? or opposite?)
-            // Linear is fine for constant flow.
-
-            m.mesh.position.y = startY + (endY - startY) * p;
-            m.mesh.position.z = startZ + (endZ - startZ) * p;
-
-            // Scale: Wide at bottom, Small at top
-            const s = 1.0 - (p * 0.5);
-            const scaleFactor = 2.5;
-            m.mesh.scale.set(40 * scaleFactor * s, 5 * scaleFactor * s, 1);
-
-            // Fade out near top
-            if (p > 0.9) {
-                m.mesh.material.opacity = 1.0 - ((p - 0.9) / 0.1);
-            } else {
-                m.mesh.material.opacity = 1.0;
-            }
+    disposeMessage(m) {
+        if (m && m.mesh) {
+            this.scene.remove(m.mesh);
+            if (m.mesh.material.map) m.mesh.material.map.dispose();
+            if (m.mesh.material) m.mesh.material.dispose();
         }
     }
 
