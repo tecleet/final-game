@@ -790,11 +790,15 @@ class CommentLog {
         const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 1.0 });
         const sprite = new THREE.Sprite(mat);
 
-        // Start Position: Bottom Center, slightly back
-        // Screen height ~40 units visible?
-        // y=-25 is below screen.
-        sprite.position.set(0, -35, -20);
-        sprite.scale.set(40, 5, 1); // Wide aspect ratio
+        // Start Position: Bottom Center, DEEP BACKGROUND
+        // UserBoxes go back to z=-40. We start at -60 to ensure no overlap.
+        // Perspective scaling: Further away = smaller, so we scale UP.
+
+        const startZ = -60;
+        const scaleFactor = 2.5; // Compensate for depth
+
+        sprite.position.set(0, -50, startZ); // Start lower (-50) to account for distance
+        sprite.scale.set(40 * scaleFactor, 5 * scaleFactor, 1);
 
         this.scene.add(sprite);
         this.messages.push({
@@ -835,13 +839,13 @@ class CommentLog {
             }
 
             // Movement: Ladder to Heaven
-            // Start: 0, -35, -20
-            // End:   0,  40, -100  (Higher end point as requested)
+            // Start: 0, -50, -60
+            // End:   0,  60, -150  (Deeper and Higher)
 
-            const startY = -35;
-            const endY = 40; // Increased ending height
-            const startZ = -20;
-            const endZ = -100;
+            const startY = -50;
+            const endY = 60;
+            const startZ = -60;
+            const endZ = -150;
 
             // Use quadratic easing for "ladder" feel (start fast, slow at top? or opposite?)
             // Linear is fine for constant flow.
@@ -850,8 +854,9 @@ class CommentLog {
             m.mesh.position.z = startZ + (endZ - startZ) * p;
 
             // Scale: Wide at bottom, Small at top
-            const s = 1.0 - (p * 0.6); // Shrink a bit more at top
-            m.mesh.scale.set(40 * s, 5 * s, 1);
+            const s = 1.0 - (p * 0.5);
+            const scaleFactor = 2.5;
+            m.mesh.scale.set(40 * scaleFactor * s, 5 * scaleFactor * s, 1);
 
             // Fade out near top
             if (p > 0.9) {
