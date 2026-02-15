@@ -464,63 +464,50 @@ class UserBox {
         ctx.save();
         ctx.clip(); // Clip everything to this rounded shape
 
-        // Border - "Corner Brackets" style
-        // Not connected to the box (inset slightly or gaps)
+        // Border - Thin Connected Round Border
         ctx.strokeStyle = this.userColor;
-        ctx.lineWidth = 20;
-        ctx.lineCap = 'round';
+        ctx.lineWidth = 6;
 
-        const rBorder = h / 2 - 10; // radius (renamed to avoid conflict)
-        const gap = 60; // Gap size in middle of edges
-
-        // Top Left Corner
+        const rBorder = h / 2 - 5; // Almost full height radius
         ctx.beginPath();
-        ctx.moveTo(10 + rBorder + gap, 10); // Start after top gap
-        ctx.lineTo(10 + rBorder, 10);
-        ctx.quadraticCurveTo(10, 10, 10, 10 + rBorder);
-        ctx.lineTo(10, 10 + rBorder + gap/2); // End before left gap
+        ctx.moveTo(rBorder, 5);
+        ctx.lineTo(w - rBorder, 5);
+        ctx.quadraticCurveTo(w - 5, 5, w - 5, rBorder + 5);
+        ctx.lineTo(w - 5, h - rBorder - 5);
+        ctx.quadraticCurveTo(w - 5, h - 5, w - rBorder, h - 5);
+        ctx.lineTo(rBorder, h - 5);
+        ctx.quadraticCurveTo(5, h - 5, 5, h - rBorder - 5);
+        ctx.lineTo(5, rBorder + 5);
+        ctx.quadraticCurveTo(5, 5, rBorder, 5);
+        ctx.closePath();
         ctx.stroke();
 
-        // Top Right Corner
-        ctx.beginPath();
-        ctx.moveTo(w - 10 - rBorder - gap, 10);
-        ctx.lineTo(w - 10 - rBorder, 10);
-        ctx.quadraticCurveTo(w - 10, 10, w - 10, 10 + rBorder);
-        ctx.lineTo(w - 10, 10 + rBorder + gap/2);
-        ctx.stroke();
+        // Text - Count (Right Aligned - Measure first to reserve space)
+        ctx.font = 'bold 160px Orbitron, sans-serif';
+        const countStr = this.user.timestamps.length.toString();
+        const countWidth = ctx.measureText(countStr).width;
+        const countX = w - 60; // Right padding
 
-        // Bottom Right Corner
-        ctx.beginPath();
-        ctx.moveTo(w - 10, h - 10 - rBorder - gap/2);
-        ctx.lineTo(w - 10, h - 10 - rBorder);
-        ctx.quadraticCurveTo(w - 10, h - 10, w - 10 - rBorder, h - 10);
-        ctx.lineTo(w - 10 - rBorder - gap, h - 10);
-        ctx.stroke();
+        // Text - Username (Center Left - Dynamic Fit)
+        // Strict Zone Calculation
+        const avatarEnd = 120 + 80 + 20; // AvatarX + Radius + Padding
+        const countStart = countX - countWidth - 40; // CountX - Width - Padding
+        const maxTextWidth = countStart - avatarEnd;
 
-        // Bottom Left Corner
-        ctx.beginPath();
-        ctx.moveTo(10, h - 10 - rBorder - gap/2);
-        ctx.lineTo(10, h - 10 - rBorder);
-        ctx.quadraticCurveTo(10, h - 10, 10 + rBorder, h - 10);
-        ctx.lineTo(10 + rBorder + gap, h - 10);
-        ctx.stroke();
-
-        // Text - Username
-        // Dynamic Font Size to Fit Box
-        const maxTextWidth = w - 400; // Account for avatar (left) and count (right)
-        let fontSize = 90;
+        let fontSize = 100;
         ctx.font = `${fontSize}px Orbitron, sans-serif`;
 
-        // Truncate logic still useful but let's fit first
+        // Truncate logic (10 chars max)
         const truncatedName = this.user.username.length > 10
             ? this.user.username.substring(0, 10)
             : this.user.username;
+        const finalName = truncatedName.toUpperCase();
 
-        let textWidth = ctx.measureText(truncatedName.toUpperCase()).width;
+        let textWidth = ctx.measureText(finalName).width;
         while (textWidth > maxTextWidth && fontSize > 40) {
             fontSize -= 5;
             ctx.font = `${fontSize}px Orbitron, sans-serif`;
-            textWidth = ctx.measureText(truncatedName.toUpperCase()).width;
+            textWidth = ctx.measureText(finalName).width;
         }
 
         ctx.fillStyle = this.userColor || '#ffffff'; // Sync with user color
@@ -528,14 +515,14 @@ class UserBox {
         ctx.textBaseline = 'middle';
         ctx.shadowBlur = 0;
 
-        ctx.fillText(truncatedName.toUpperCase(), 280, h / 2);
+        // Draw Name
+        ctx.fillText(finalName, avatarEnd, h / 2);
 
-        // Text - Count
+        // Draw Count
         ctx.font = 'bold 160px Orbitron, sans-serif';
-        ctx.fillStyle = this.userColor; // Sync count with user color
+        ctx.fillStyle = this.userColor;
         ctx.textAlign = 'right';
-        ctx.shadowBlur = 0;
-        ctx.fillText(this.user.timestamps.length, w - 60, h / 2 + 20);
+        ctx.fillText(countStr, countX, h / 2 + 20);
 
         // Avatar Placeholder (Circle) - LEFT
         const avatarX = 120;
@@ -559,21 +546,19 @@ class UserBox {
 
         const isLeader = (this.user.timestamps.length === maxCount && maxCount > 0);
 
-        // Define realistic image URLs (HEADS/FACES ONLY)
-        const lionUrl = 'https://images.unsplash.com/photo-1546182990-dffeafbe841d?ixlib=rb-4.0.3&auto=format&fit=facearea&facepad=2&w=200&h=200&q=80';
+        // Define realistic image URLs (Curated Close-Up Animal Faces)
+        // Using explicit crop parameters to zoom into faces
+        const lionUrl = 'https://images.unsplash.com/photo-1546182990-dffeafbe841d?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80&crop=faces';
         const otherAnimals = [
-            'https://images.unsplash.com/photo-1557008075-7f2c5efa4cfd?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Tiger (keep crop, tiger face usually centered)
-            'https://images.unsplash.com/photo-1535591273668-578e31182c4f?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Bear
-            'https://images.unsplash.com/photo-1564349683136-77e08dba1ef7?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Panda
-            'https://images.unsplash.com/photo-1533738363-b7f9aef128ce?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Cat
-            'https://images.unsplash.com/photo-1589656966895-2f33e7653819?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Polar Bear
-            'https://images.unsplash.com/photo-1555169062-013468b47731?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Parrot
-            'https://images.unsplash.com/photo-1574158622682-e40e69881006?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Cat2
-            'https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80'  // Pug
+            'https://images.unsplash.com/photo-1505672984959-1c07309e4694?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80', // Wolf Face
+            'https://images.unsplash.com/photo-1557008075-7f2c5efa4cfd?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80', // Tiger Face
+            'https://images.unsplash.com/photo-1578165272330-802e3a0937a2?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80', // Fox Face
+            'https://images.unsplash.com/photo-1615963244664-5b845b2025ee?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80', // Owl Face
+            'https://images.unsplash.com/photo-1522502693259-26ddcfc24e64?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80', // Dog Face
+            'https://images.unsplash.com/photo-1574158622682-e40e69881006?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80', // Cat Eyes
+            'https://images.unsplash.com/photo-1564349683136-77e08dba1ef7?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80', // Panda Face
+            'https://images.unsplash.com/photo-1530595467537-0b5996c41f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80'  // Bear Face
         ];
-        // Note: Unsplash 'facearea' works best for humans, but 'crop' usually centers on subject.
-        // For strict "heads only", we rely on the image content being a close-up.
-        // The URLs above are already selecting specific photo IDs that are close-ups.
 
         let targetUrl = '';
         if (isLeader) {
@@ -702,26 +687,39 @@ class UserBox {
     }
 
     spawnTrailParticle() {
-        // More visible trail: Use a larger geometry (rounded plane)
-        const geo = new THREE.PlaneGeometry(this.width * this.currentScale, this.height * this.currentScale);
+        // Rounded Trail: Match the box geometry roughly with a Circle or Rounded Plane
+        // Since RoundedPlane isn't a standard primitive easily, we use a Circle scaled
+        // to approximate the pill shape, or just a lower opacity version of the RoundedBox texture?
+        // Let's use CircleGeometry for "bubbles" trail or Plane with Rounded Texture
+        // Simpler: Use a Plane but apply a circular soft gradient map?
+        // User asked for "trail animation of the moving boxex".
+        // Let's stick to the Ghost Effect (Plane) but make it rounder by using a texture or just Circle
+
+        const scale = this.currentScale;
+        // Use a simple Plane but maybe with a rounded texture if we had one.
+        // For performance, let's use a Circle scaled to be an ellipse matching the box aspect ratio
+        // Box is 7 x 2.4. Aspect ~2.9
+
+        const geo = new THREE.CircleGeometry(1, 16);
         const mat = new THREE.MeshBasicMaterial({
             color: this.borderColor,
             transparent: true,
-            opacity: 0.3, // Lower opacity for ghost effect
+            opacity: 0.25,
             side: THREE.DoubleSide
         });
         const mesh = new THREE.Mesh(geo, mat);
 
-        // Spawn at exact box position
+        mesh.scale.set((this.width * scale) / 2, (this.height * scale) / 2, 1);
+
         mesh.position.copy(this.group.position);
-        mesh.rotation.copy(this.group.rotation); // Match rotation
-        mesh.position.z -= 0.1; // Slightly behind
+        mesh.rotation.copy(this.group.rotation);
+        mesh.position.z -= 0.5; // Behind
 
         scene.add(mesh);
 
         const fade = () => {
-            mat.opacity -= 0.03; // Fade faster
-            mesh.scale.multiplyScalar(0.95); // Shrink
+            mat.opacity -= 0.015; // Slower fade for longer trail
+            mesh.scale.multiplyScalar(0.96);
             if (mat.opacity <= 0) {
                 scene.remove(mesh);
                 geo.dispose();
