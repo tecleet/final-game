@@ -444,24 +444,45 @@ class UserBox {
         ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, w, h);
 
-        // Border - Thinner, cleaner
-        ctx.strokeStyle = this.userColor; // Sync with random user color
-        ctx.lineWidth = 15;
+        // Border - "Corner Brackets" style
+        // Not connected to the box (inset slightly or gaps)
+        ctx.strokeStyle = this.userColor;
+        ctx.lineWidth = 20;
+        ctx.lineCap = 'round';
 
-        // Draw rounded rectangle on canvas to match 3D geometry
-        // Use path for rounded rect (50% radius)
-        const r = h / 2 - 10; // ~165px radius
+        const r = h / 2 - 10; // radius
+        const gap = 60; // Gap size in middle of edges
+
+        // Top Left Corner
         ctx.beginPath();
-        ctx.moveTo(10 + r, 10);
+        ctx.moveTo(10 + r + gap, 10); // Start after top gap
+        ctx.lineTo(10 + r, 10);
+        ctx.quadraticCurveTo(10, 10, 10, 10 + r);
+        ctx.lineTo(10, 10 + r + gap/2); // End before left gap
+        ctx.stroke();
+
+        // Top Right Corner
+        ctx.beginPath();
+        ctx.moveTo(w - 10 - r - gap, 10);
         ctx.lineTo(w - 10 - r, 10);
         ctx.quadraticCurveTo(w - 10, 10, w - 10, 10 + r);
+        ctx.lineTo(w - 10, 10 + r + gap/2);
+        ctx.stroke();
+
+        // Bottom Right Corner
+        ctx.beginPath();
+        ctx.moveTo(w - 10, h - 10 - r - gap/2);
         ctx.lineTo(w - 10, h - 10 - r);
         ctx.quadraticCurveTo(w - 10, h - 10, w - 10 - r, h - 10);
-        ctx.lineTo(10 + r, h - 10);
-        ctx.quadraticCurveTo(10, h - 10, 10, h - 10 - r);
-        ctx.lineTo(10, 10 + r);
-        ctx.quadraticCurveTo(10, 10, 10 + r, 10);
-        ctx.closePath();
+        ctx.lineTo(w - 10 - r - gap, h - 10);
+        ctx.stroke();
+
+        // Bottom Left Corner
+        ctx.beginPath();
+        ctx.moveTo(10, h - 10 - r - gap/2);
+        ctx.lineTo(10, h - 10 - r);
+        ctx.quadraticCurveTo(10, h - 10, 10 + r, h - 10);
+        ctx.lineTo(10 + r + gap, h - 10);
         ctx.stroke();
 
         // Text - Username
@@ -509,9 +530,8 @@ class UserBox {
         ctx.lineWidth = 4;
         ctx.stroke();
 
-        // ANIMAL ICON LOGIC
+        // ANIMAL ICON LOGIC (REALISTIC IMAGES)
         // "Number one claims lion icon"
-        // Find highest count globally
         let maxCount = 0;
         dataManager.activeUsers.forEach(u => {
             if (u.timestamps.length > maxCount) maxCount = u.timestamps.length;
@@ -519,30 +539,64 @@ class UserBox {
 
         const isLeader = (this.user.timestamps.length === maxCount && maxCount > 0);
 
-        let icon = '';
+        // Define realistic image URLs
+        const lionUrl = 'https://images.unsplash.com/photo-1546182990-dffeafbe841d?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80';
+        const otherAnimals = [
+            'https://images.unsplash.com/photo-1557008075-7f2c5efa4cfd?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Tiger
+            'https://images.unsplash.com/photo-1535591273668-578e31182c4f?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Bear
+            'https://images.unsplash.com/photo-1564349683136-77e08dba1ef7?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Panda
+            'https://images.unsplash.com/photo-1533738363-b7f9aef128ce?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Cat
+            'https://images.unsplash.com/photo-1589656966895-2f33e7653819?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Polar Bear
+            'https://images.unsplash.com/photo-1555169062-013468b47731?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Parrot
+            'https://images.unsplash.com/photo-1574158622682-e40e69881006?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Cat2
+            'https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80'  // Pug
+        ];
+
+        let targetUrl = '';
         if (isLeader) {
-            icon = '🦁'; // Lion for leader
+            targetUrl = lionUrl;
         } else {
-            // Consistent random animal for non-leaders based on username hash
-            const animals = ['🐯', '🐻', '🐨', '🐼', '🦊', '🐺', '🐗', '🐵', '🐸', '🦄', '🐲', '🦅', '🦉'];
             let hash = 0;
             for (let i = 0; i < this.user.username.length; i++) {
                 hash = this.user.username.charCodeAt(i) + ((hash << 5) - hash);
             }
-            const index = Math.abs(hash) % animals.length;
-            icon = animals[index];
+            const index = Math.abs(hash) % otherAnimals.length;
+            targetUrl = otherAnimals[index];
         }
 
-        // Draw Emoji Icon
-        ctx.font = '100px serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText(icon, avatarX, avatarY + 10); // +10 for emoji baseline adjust
+        // Load & Draw Image
+        if (!this.animalImg || this.animalImgSrc !== targetUrl) {
+            // Need to load new image
+            if (!this.loadingAnimal) {
+                this.loadingAnimal = true;
+                const img = new Image();
+                img.crossOrigin = "Anonymous";
+                img.src = targetUrl;
+                img.onload = () => {
+                    this.animalImg = img;
+                    this.animalImgSrc = targetUrl; // Cache key
+                    this.loadingAnimal = false;
+                    this.updateTexture(); // Redraw
+                };
+            }
+        }
 
-        /* Disable YouTube Avatar for now to prioritize requested Animal Icons
-        if (this.user.avatar && !this.avatarLoaded) { ... }
-        */
+        if (this.animalImg) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(avatarX, avatarY, avatarR, 0, Math.PI * 2);
+            ctx.clip();
+            // Draw image covering the circle
+            ctx.drawImage(this.animalImg, avatarX - avatarR, avatarY - avatarR, avatarR * 2, avatarR * 2);
+            ctx.restore();
+        } else {
+            // Fallback while loading
+            ctx.font = '60px Orbitron';
+            ctx.fillStyle = '#666';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('...', avatarX, avatarY);
+        }
 
         this.texture.needsUpdate = true;
     }
