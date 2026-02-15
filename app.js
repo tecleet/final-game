@@ -401,9 +401,13 @@ class UserBox {
             (Math.random() - 0.5) * 30
         );
 
-        // Complex Movement using Simplex-like Logic
-        this.seed = Math.random() * 1000;
-        this.speed = (0.3 + Math.random() * 0.5) * 0.5; // Reduced speed by half
+        // Physics-based Movement (Wall Bounce)
+        this.velocity = new THREE.Vector3(
+            (Math.random() - 0.5) * 0.1, // Reduced initial speed
+            (Math.random() - 0.5) * 0.1,
+            (Math.random() - 0.5) * 0.05
+        );
+        this.speed = 1.0;
 
         // Target Scale
         this.targetScale = 1.0;
@@ -442,8 +446,20 @@ class UserBox {
         ctx.lineWidth = 15;
 
         // Draw rounded rectangle on canvas to match 3D geometry
-        // (Simple rect is fine as geometry handles 3D shape, but texture needs to look good)
-        ctx.strokeRect(10, 10, w-20, h-20);
+        // Use path for rounded rect
+        const r = 40; // Corner radius for texture
+        ctx.beginPath();
+        ctx.moveTo(10 + r, 10);
+        ctx.lineTo(w - 10 - r, 10);
+        ctx.quadraticCurveTo(w - 10, 10, w - 10, 10 + r);
+        ctx.lineTo(w - 10, h - 10 - r);
+        ctx.quadraticCurveTo(w - 10, h - 10, w - 10 - r, h - 10);
+        ctx.lineTo(10 + r, h - 10);
+        ctx.quadraticCurveTo(10, h - 10, 10, h - 10 - r);
+        ctx.lineTo(10, 10 + r);
+        ctx.quadraticCurveTo(10, 10, 10 + r, 10);
+        ctx.closePath();
+        ctx.stroke();
 
         // Text - Username
         // "STRAIDT TEXT" - Standard weight, high contrast
@@ -508,32 +524,72 @@ class UserBox {
         this.texture.needsUpdate = true;
     }
 
-    // Simple pseudo-noise function
-    noise(x, y) {
-        return Math.sin(x * 12.9898 + y * 78.233) * 43758.5453 % 1;
-    }
-
     update(time) {
         // Smooth Scale Transition
         this.currentScale += (this.targetScale - this.currentScale) * 0.1;
         this.group.scale.set(this.currentScale, this.currentScale, this.currentScale);
 
-        // ORGANIC MOVEMENT (Perlin-ish)
-        // We use sine waves of different frequencies to simulate wandering
-        const t = time * this.speed + this.seed;
+        // --- WALL BOUNCE PHYSICS ---
 
-        // Calculate new position based on multiple sine waves (Lissajous-like but chaotic)
-        const targetX = Math.sin(t * 0.3) * 50 + Math.cos(t * 0.7) * 20;
-        const targetY = Math.cos(t * 0.4) * 30 + Math.sin(t * 1.1) * 10;
-        const targetZ = Math.sin(t * 0.2) * 20 - 10; // Depth variation
+        // 1. Calculate Frustum Size at Box's Depth
+        // Distance from camera to box plane (approx)
+        const dist = camera.position.z - this.group.position.z;
+        const vFOV = THREE.MathUtils.degToRad(camera.fov); // vertical field of view
 
-        // Smoothly interpolate current position to target (Damping)
-        this.group.position.x += (targetX - this.group.position.x) * 0.02;
-        this.group.position.y += (targetY - this.group.position.y) * 0.02;
-        this.group.position.z += (targetZ - this.group.position.z) * 0.02;
+        // Visible height at this distance
+        const visibleHeight = 2 * Math.tan(vFOV / 2) * dist;
+        // Visible width
+        const visibleWidth = visibleHeight * camera.aspect;
 
-        // Face camera
-        this.group.lookAt(camera.position);
+        // Half dimensions for bounds
+        const xBound = visibleWidth / 2 - (this.width * this.currentScale) / 2;
+        const yBound = visibleHeight / 2 - (this.height * this.currentScale) / 2;
+        // Z bounds (arbitrary depth volume)
+        const zFront = 20;
+        const zBack = -40;
+
+        // 2. Add small random acceleration (Brownian motion)
+        this.velocity.x += (Math.random() - 0.5) * 0.002;
+        this.velocity.y += (Math.random() - 0.5) * 0.002;
+        this.velocity.z += (Math.random() - 0.5) * 0.001;
+
+        // Limit speed
+        const maxSpeed = 0.15;
+        this.velocity.clampLength(0, maxSpeed);
+
+        // 3. Move
+        this.group.position.add(this.velocity);
+
+        // 4. Check Collisions & Bounce
+        // X
+        if (this.group.position.x > xBound) {
+            this.group.position.x = xBound;
+            this.velocity.x *= -1;
+        } else if (this.group.position.x < -xBound) {
+            this.group.position.x = -xBound;
+            this.velocity.x *= -1;
+        }
+
+        // Y
+        if (this.group.position.y > yBound) {
+            this.group.position.y = yBound;
+            this.velocity.y *= -1;
+        } else if (this.group.position.y < -yBound) {
+            this.group.position.y = -yBound;
+            this.velocity.y *= -1;
+        }
+
+        // Z
+        if (this.group.position.z > zFront) {
+            this.group.position.z = zFront;
+            this.velocity.z *= -1;
+        } else if (this.group.position.z < zBack) {
+            this.group.position.z = zBack;
+            this.velocity.z *= -1;
+        }
+
+        // Face camera (Optional: might look weird if strictly 2D bounce, but requested 3D box)
+        // this.group.lookAt(camera.position); // Actually, keep it flat facing camera usually looks best for text
 
         // Spawn Trail Particle
         if (time - this.lastTrailTime > 0.08) {
