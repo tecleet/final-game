@@ -176,7 +176,8 @@ class YouTubeClient {
         } catch (error) {
             console.error("Error fetching Live Chat ID:", error);
             if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-                throw new Error("Network/CORS Error: Check API Key restrictions (allow localhost) or internet connection.");
+                const domain = window.location.hostname;
+                throw new Error(`Network/CORS Error: Check API Key restrictions. Ensure '${domain}' is added to "Website Restrictions" in Google Cloud Console.`);
             }
             throw error;
         }
@@ -213,7 +214,8 @@ class YouTubeClient {
         } catch (error) {
             console.error("Error fetching messages:", error);
             if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-                 throw new Error("Network/CORS Error: Stream might be offline or API Key restrictions block localhost.");
+                 const domain = window.location.hostname;
+                 throw new Error(`Network/CORS Error: Stream offline OR API Key restricts '${domain}'. Check Google Cloud Console.`);
             }
             throw error;
         }
@@ -231,7 +233,8 @@ class FakeDataGenerator {
     start(callback) {
         this.stop();
         const loop = () => {
-            const delay = Math.random() * 2000 + 500;
+            // Flood Simulation: Faster comments (100ms - 800ms)
+            const delay = Math.random() * 700 + 100;
             this.interval = setTimeout(() => {
                 const msg = this.generateMessage();
                 callback([msg]);
@@ -816,40 +819,57 @@ class CommentLog {
             // Target: Top (y=20), Back (z=-100)
 
             // Linear progress?
-            const life = 10.0; // Seconds to reach top/die
+            const life = 15.0; // Slower ascent (longer life) to decrease space/stack more
             const p = age / life;
 
+            // Flood Control: If too many messages, kill old ones faster or hard limit
+            if (this.messages.length > 50 && i < this.messages.length - 50) {
+                 // Force expire oldest if over limit
+                 this.removeMessage(i);
+                 continue;
+            }
+
             if (p >= 1.0) {
-                this.scene.remove(m.mesh);
-                m.mesh.material.map.dispose();
-                m.mesh.material.dispose();
-                this.messages.splice(i, 1);
+                this.removeMessage(i);
                 continue;
             }
 
             // Movement: Ladder to Heaven
             // Start: 0, -35, -20
-            // End:   0,  15, -80  (25% from top? Top is ~20-30 depending on FOV)
+            // End:   0,  40, -100  (Higher end point as requested)
 
             const startY = -35;
-            const endY = 15;
+            const endY = 40; // Increased ending height
             const startZ = -20;
-            const endZ = -80;
+            const endZ = -100;
+
+            // Use quadratic easing for "ladder" feel (start fast, slow at top? or opposite?)
+            // Linear is fine for constant flow.
 
             m.mesh.position.y = startY + (endY - startY) * p;
             m.mesh.position.z = startZ + (endZ - startZ) * p;
 
             // Scale: Wide at bottom, Small at top
-            // Sprite perspective handles some, but let's enforce "ladder" taper
-            // At bottom (p=0), scale = 1. At top (p=1), scale = 0.5
-            const s = 1.0 - (p * 0.5);
+            const s = 1.0 - (p * 0.6); // Shrink a bit more at top
             m.mesh.scale.set(40 * s, 5 * s, 1);
 
             // Fade out near top
-            if (p > 0.8) {
-                m.mesh.material.opacity = 1.0 - ((p - 0.8) / 0.2);
+            if (p > 0.9) {
+                m.mesh.material.opacity = 1.0 - ((p - 0.9) / 0.1);
+            } else {
+                m.mesh.material.opacity = 1.0;
             }
         }
+    }
+
+    removeMessage(index) {
+        const m = this.messages[index];
+        if (m && m.mesh) {
+            this.scene.remove(m.mesh);
+            if (m.mesh.material.map) m.mesh.material.map.dispose();
+            if (m.mesh.material) m.mesh.material.dispose();
+        }
+        this.messages.splice(index, 1);
     }
 }
 
