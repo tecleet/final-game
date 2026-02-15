@@ -3,7 +3,7 @@
     --neon-magenta: #f0f;
     --neon-purple: #bc13fe;
     --dark-bg: #050505;
-    --panel-bg: rgba(10, 10, 15, 0.95);
+    --panel-bg: #000000;
 }
 
 * {
@@ -84,6 +84,8 @@ body {
     opacity: 0;
     pointer-events: none;
     transform: scale(0.95);
+    visibility: hidden; /* Ensure it is totally hidden */
+    transition: opacity 0.5s ease, transform 0.5s ease, visibility 0s 0.5s; /* Delay visibility change */
 }
 
 h1 {
@@ -111,7 +113,7 @@ label {
 
 input {
     width: 100%;
-    background: rgba(0, 0, 0, 0.6);
+    background: #111111;
     border: 1px solid var(--neon-cyan);
     color: #fff;
     font-family: 'Orbitron', sans-serif;

@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 // --- CONFIGURATION ---
 const CONFIG = {
     PARTICLE_COUNT: 1000,
-    BLOOM_STRENGTH: 1.2, // Slightly reduced to avoid text washout
-    BLOOM_RADIUS: 0.5,
-    BLOOM_THRESHOLD: 0,
+    BLOOM_STRENGTH: 0.6, // Reduced further for clearer text
+    BLOOM_RADIUS: 0.4,
+    BLOOM_THRESHOLD: 0.1, // Only bloom bright parts
     FOV: 60,
     CAMERA_Z: 60, // Pulled back slightly for more view
     COLORS: [0x00ffff, 0xff00ff, 0xbc13fe, 0x00ffaa] // Added Neon Green
@@ -369,23 +370,28 @@ class UserBox {
             map: this.texture,
             transparent: true,
             opacity: 1.0, // Ensure full opacity
-            side: THREE.DoubleSide
+            side: THREE.FrontSide // Ensure text reads correctly
         });
 
-        const geometry = new THREE.BoxGeometry(this.width, this.height, this.depth);
+        // Use RoundedBoxGeometry instead of BoxGeometry
+        const geometry = new RoundedBoxGeometry(this.width, this.height, this.depth, 4, 0.5); // segments, radius
         this.mesh = new THREE.Mesh(geometry, material);
         this.group.add(this.mesh);
 
-        // 2. Glowing Border
-        const edges = new THREE.EdgesGeometry(geometry);
-        const borderMaterial = new THREE.LineBasicMaterial({
-            color: 0x00ffff,
-            transparent: true,
-            opacity: 0.9,
-            linewidth: 2
-        });
-        this.border = new THREE.LineSegments(edges, borderMaterial);
+        // 2. Glowing Border (Simplified for Rounded Box)
+        // EdgesGeometry doesn't work well with rounded box, so we use a secondary wireframe or just rely on texture border
+        // Let's remove the line segments for rounded box as it looks messy.
+        // Instead, we can add a glow mesh slightly larger
+        /*
+        const glowGeo = new RoundedBoxGeometry(this.width + 0.1, this.height + 0.1, this.depth + 0.1, 4, 0.5);
+        const glowMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: true, transparent: true, opacity: 0.3 });
+        this.border = new THREE.Mesh(glowGeo, glowMat);
         this.group.add(this.border);
+        */
+       // Actually, just the texture border is cleaner for "STRAIDT TEXT". We can skip the wireframe cage.
+       // Or keep a subtle wireframe if needed. Let's skip to keep it clean.
+
+       this.borderColor = 0x00ffff; // Store for trails
 
         // 3. Initial Position & Movement Setup (Improved)
         // Spread across wider area
@@ -397,7 +403,7 @@ class UserBox {
 
         // Complex Movement using Simplex-like Logic
         this.seed = Math.random() * 1000;
-        this.speed = 0.3 + Math.random() * 0.5; // Varied speed
+        this.speed = (0.3 + Math.random() * 0.5) * 0.5; // Reduced speed by half
 
         // Target Scale
         this.targetScale = 1.0;
@@ -416,7 +422,9 @@ class UserBox {
 
     updateTexture() {
         const count = this.user.timestamps.length;
-        this.targetScale = 1.0 + Math.min((count - 1) * 0.15, 1.5);
+        // More aggressive scaling for higher counts
+        // Starts at 1.0, adds 0.2 per count, max 3x size
+        this.targetScale = 1.0 + Math.min((count - 1) * 0.2, 2.0);
 
         const ctx = this.ctx;
         const w = this.canvas.width;
@@ -425,39 +433,43 @@ class UserBox {
         // Clear
         ctx.clearRect(0, 0, w, h);
 
-        // Background - Darker for better contrast
-        ctx.fillStyle = 'rgba(5, 5, 10, 0.95)'; // Near opaque black/blue
+        // Background - SOLID OPAQUE BLACK for max contrast
+        ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, w, h);
 
-        // Border Glow Effect (Inner)
+        // Border - Thinner, cleaner
         ctx.strokeStyle = '#00ffff';
-        ctx.lineWidth = 10; // Thicker line for high-res
-        ctx.strokeRect(5, 5, w-10, h-10);
+        ctx.lineWidth = 15;
+
+        // Draw rounded rectangle on canvas to match 3D geometry
+        // (Simple rect is fine as geometry handles 3D shape, but texture needs to look good)
+        ctx.strokeRect(10, 10, w-20, h-20);
 
         // Text - Username
-        // Bolder, larger font
-        ctx.font = 'bold 80px Orbitron, sans-serif';
+        // "STRAIDT TEXT" - Standard weight, high contrast
+        ctx.font = '80px Orbitron, sans-serif'; // Removed 'bold' to be cleaner/straighter
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        // No shadow for cleaner text
+
+        // No shadow/glow at all for text
         ctx.shadowBlur = 0;
+
         // Truncate to 7 chars max
         const truncatedName = this.user.username.length > 7
-            ? this.user.username.substring(0, 7) + '.'
+            ? this.user.username.substring(0, 7)
             : this.user.username;
-        ctx.fillText(truncatedName.toUpperCase(), 240, h / 2); // Adjusted x for avatar
 
-        // Text - Count (Big & Neon)
-        ctx.font = 'bold 160px Orbitron, sans-serif'; // HUGE count
+        ctx.fillText(truncatedName.toUpperCase(), 250, h / 2);
+
+        // Text - Count
+        ctx.font = 'bold 160px Orbitron, sans-serif';
         ctx.fillStyle = '#ff00ff';
         ctx.textAlign = 'right';
+        // Reduced glow for count too
         ctx.shadowColor = '#ff00ff';
-        ctx.shadowBlur = 20; // Moderate glow
-        ctx.fillText(this.user.timestamps.length, w - 60, h / 2 + 20);
-
-        // Reset Shadow
         ctx.shadowBlur = 0;
+        ctx.fillText(this.user.timestamps.length, w - 60, h / 2 + 20);
 
         // Avatar Placeholder (Circle) - LEFT
         const avatarX = 120;
@@ -533,7 +545,7 @@ class UserBox {
     spawnTrailParticle() {
         const geo = new THREE.PlaneGeometry(0.5, 0.5);
         const mat = new THREE.MeshBasicMaterial({
-            color: this.border.material.color,
+            color: this.borderColor,
             transparent: true,
             opacity: 0.6,
             side: THREE.DoubleSide
@@ -566,8 +578,6 @@ class UserBox {
         this.texture.dispose();
         this.mesh.geometry.dispose();
         this.mesh.material.dispose();
-        this.border.geometry.dispose();
-        this.border.material.dispose();
     }
 }
 init();
