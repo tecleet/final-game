@@ -109,9 +109,21 @@ function animate() {
 
     const time = clock.getElapsedTime();
 
+    // Liquid/Flow Background
     if (particles) {
-        particles.rotation.y += 0.0005;
-        particles.rotation.x += 0.0002;
+        // More organic wave movement instead of simple rotation
+        const positions = particles.geometry.attributes.position.array;
+        for (let i = 0; i < CONFIG.PARTICLE_COUNT; i++) {
+            const i3 = i * 3;
+            // Original positions are not stored, so we drift them
+            // Or better, use sine waves on Y based on X and Z
+            // Simple flow:
+            positions[i3 + 1] += Math.sin(time * 0.5 + positions[i3] * 0.05) * 0.1;
+        }
+        particles.geometry.attributes.position.needsUpdate = true;
+
+        // Slow rotation
+        particles.rotation.z = Math.sin(time * 0.1) * 0.1;
     }
 
     if (dataManager) {
@@ -364,6 +376,11 @@ class UserBox {
         this.texture.minFilter = THREE.LinearFilter;
         this.texture.magFilter = THREE.LinearFilter; // Smooth scaling
 
+        // Pick random neon color
+        const colors = ['#00ffff', '#ff00ff', '#bc13fe', '#00ffaa', '#ffaa00', '#ff3333'];
+        this.userColor = colors[Math.floor(Math.random() * colors.length)];
+        this.borderColor = new THREE.Color(this.userColor); // For trails
+
         // Use MeshBasicMaterial with Emissive map if possible, but texture map is emissive enough
         // Using BasicMaterial ensures it ignores lighting and glows with bloom
         const material = new THREE.MeshBasicMaterial({
@@ -374,24 +391,10 @@ class UserBox {
         });
 
         // Use RoundedBoxGeometry instead of BoxGeometry
-        const geometry = new RoundedBoxGeometry(this.width, this.height, this.depth, 4, 0.5); // segments, radius
+        // 50% radius: Height is 2.4, so radius ~1.2
+        const geometry = new RoundedBoxGeometry(this.width, this.height, this.depth, 4, 1.2);
         this.mesh = new THREE.Mesh(geometry, material);
         this.group.add(this.mesh);
-
-        // 2. Glowing Border (Simplified for Rounded Box)
-        // EdgesGeometry doesn't work well with rounded box, so we use a secondary wireframe or just rely on texture border
-        // Let's remove the line segments for rounded box as it looks messy.
-        // Instead, we can add a glow mesh slightly larger
-        /*
-        const glowGeo = new RoundedBoxGeometry(this.width + 0.1, this.height + 0.1, this.depth + 0.1, 4, 0.5);
-        const glowMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: true, transparent: true, opacity: 0.3 });
-        this.border = new THREE.Mesh(glowGeo, glowMat);
-        this.group.add(this.border);
-        */
-       // Actually, just the texture border is cleaner for "STRAIDT TEXT". We can skip the wireframe cage.
-       // Or keep a subtle wireframe if needed. Let's skip to keep it clean.
-
-       this.borderColor = 0x00ffff; // Store for trails
 
         // 3. Initial Position & Movement Setup (Improved)
         // Spread across wider area
@@ -442,12 +445,12 @@ class UserBox {
         ctx.fillRect(0, 0, w, h);
 
         // Border - Thinner, cleaner
-        ctx.strokeStyle = '#00ffff';
+        ctx.strokeStyle = this.userColor; // Sync with random user color
         ctx.lineWidth = 15;
 
         // Draw rounded rectangle on canvas to match 3D geometry
-        // Use path for rounded rect
-        const r = 40; // Corner radius for texture
+        // Use path for rounded rect (50% radius)
+        const r = h / 2 - 10; // ~165px radius
         ctx.beginPath();
         ctx.moveTo(10 + r, 10);
         ctx.lineTo(w - 10 - r, 10);
@@ -462,28 +465,34 @@ class UserBox {
         ctx.stroke();
 
         // Text - Username
-        // "STRAIDT TEXT" - Standard weight, high contrast
-        ctx.font = '80px Orbitron, sans-serif'; // Removed 'bold' to be cleaner/straighter
-        ctx.fillStyle = '#ffffff';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
+        // Dynamic Font Size to Fit Box
+        const maxTextWidth = w - 400; // Account for avatar (left) and count (right)
+        let fontSize = 90;
+        ctx.font = `${fontSize}px Orbitron, sans-serif`;
 
-        // No shadow/glow at all for text
-        ctx.shadowBlur = 0;
-
-        // Truncate to 7 chars max
-        const truncatedName = this.user.username.length > 7
-            ? this.user.username.substring(0, 7)
+        // Truncate logic still useful but let's fit first
+        const truncatedName = this.user.username.length > 10
+            ? this.user.username.substring(0, 10)
             : this.user.username;
 
-        ctx.fillText(truncatedName.toUpperCase(), 250, h / 2);
+        let textWidth = ctx.measureText(truncatedName.toUpperCase()).width;
+        while (textWidth > maxTextWidth && fontSize > 40) {
+            fontSize -= 5;
+            ctx.font = `${fontSize}px Orbitron, sans-serif`;
+            textWidth = ctx.measureText(truncatedName.toUpperCase()).width;
+        }
+
+        ctx.fillStyle = this.userColor || '#ffffff'; // Sync with user color
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.shadowBlur = 0;
+
+        ctx.fillText(truncatedName.toUpperCase(), 280, h / 2);
 
         // Text - Count
         ctx.font = 'bold 160px Orbitron, sans-serif';
-        ctx.fillStyle = '#ff00ff';
+        ctx.fillStyle = this.userColor; // Sync count with user color
         ctx.textAlign = 'right';
-        // Reduced glow for count too
-        ctx.shadowColor = '#ff00ff';
         ctx.shadowBlur = 0;
         ctx.fillText(this.user.timestamps.length, w - 60, h / 2 + 20);
 
@@ -496,30 +505,44 @@ class UserBox {
         ctx.arc(avatarX, avatarY, avatarR, 0, Math.PI * 2);
         ctx.fillStyle = '#333';
         ctx.fill();
-        ctx.strokeStyle = '#00ffff';
+        ctx.strokeStyle = this.userColor; // Sync circle
         ctx.lineWidth = 4;
         ctx.stroke();
 
-        // Load Avatar Image (Async)
-        if (this.user.avatar && !this.avatarLoaded) {
-            const img = new Image();
-            img.crossOrigin = "Anonymous";
-            img.src = this.user.avatar;
-            img.onload = () => {
-                this.avatarImg = img;
-                this.avatarLoaded = true;
-                this.updateTexture();
-            };
+        // ANIMAL ICON LOGIC
+        // "Number one claims lion icon"
+        // Find highest count globally
+        let maxCount = 0;
+        dataManager.activeUsers.forEach(u => {
+            if (u.timestamps.length > maxCount) maxCount = u.timestamps.length;
+        });
+
+        const isLeader = (this.user.timestamps.length === maxCount && maxCount > 0);
+
+        let icon = '';
+        if (isLeader) {
+            icon = '🦁'; // Lion for leader
+        } else {
+            // Consistent random animal for non-leaders based on username hash
+            const animals = ['🐯', '🐻', '🐨', '🐼', '🦊', '🐺', '🐗', '🐵', '🐸', '🦄', '🐲', '🦅', '🦉'];
+            let hash = 0;
+            for (let i = 0; i < this.user.username.length; i++) {
+                hash = this.user.username.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const index = Math.abs(hash) % animals.length;
+            icon = animals[index];
         }
 
-        if (this.avatarLoaded && this.avatarImg) {
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(avatarX, avatarY, avatarR, 0, Math.PI * 2);
-            ctx.clip();
-            ctx.drawImage(this.avatarImg, avatarX - avatarR, avatarY - avatarR, avatarR * 2, avatarR * 2);
-            ctx.restore();
-        }
+        // Draw Emoji Icon
+        ctx.font = '100px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(icon, avatarX, avatarY + 10); // +10 for emoji baseline adjust
+
+        /* Disable YouTube Avatar for now to prioritize requested Animal Icons
+        if (this.user.avatar && !this.avatarLoaded) { ... }
+        */
 
         this.texture.needsUpdate = true;
     }
@@ -599,25 +622,26 @@ class UserBox {
     }
 
     spawnTrailParticle() {
-        const geo = new THREE.PlaneGeometry(0.5, 0.5);
+        // More visible trail: Use a larger geometry (rounded plane)
+        const geo = new THREE.PlaneGeometry(this.width * this.currentScale, this.height * this.currentScale);
         const mat = new THREE.MeshBasicMaterial({
             color: this.borderColor,
             transparent: true,
-            opacity: 0.6,
+            opacity: 0.3, // Lower opacity for ghost effect
             side: THREE.DoubleSide
         });
         const mesh = new THREE.Mesh(geo, mat);
 
-        // Spawn slightly behind box
+        // Spawn at exact box position
         mesh.position.copy(this.group.position);
-        mesh.position.z -= 0.5;
+        mesh.rotation.copy(this.group.rotation); // Match rotation
+        mesh.position.z -= 0.1; // Slightly behind
 
-        mesh.lookAt(camera.position);
         scene.add(mesh);
 
         const fade = () => {
-            mat.opacity -= 0.02;
-            mesh.scale.multiplyScalar(0.92);
+            mat.opacity -= 0.03; // Fade faster
+            mesh.scale.multiplyScalar(0.95); // Shrink
             if (mat.opacity <= 0) {
                 scene.remove(mesh);
                 geo.dispose();
