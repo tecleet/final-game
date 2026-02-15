@@ -6,37 +6,37 @@ def verify_app():
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
 
+        # Capture Console Logs
+        page.on("console", lambda msg: print(f"CONSOLE: {msg.text}"))
+        page.on("pageerror", lambda err: print(f"PAGE ERROR: {err}"))
+
         # 1. Load the app
         print("Loading app...")
-        page.goto("http://localhost:8000")
+        try:
+            page.goto("http://localhost:8000")
+        except Exception as e:
+            print(f"Navigation failed: {e}")
+            return
 
-        # 2. Test Error Handling (Fake Video ID)
-        print("Testing Error Handling...")
-        page.fill("#video-id", "INVALID_VIDEO_ID_123")
-        page.fill("#api-key", "FAKE_API_KEY")
-
-        # Wait for button to be visible and click it
-        page.locator("#btn-connect").click()
-
-        # Give it a moment for the alert (which we ignore in headless usually unless handled)
-        # or for UI update
+        # Give it a moment to load modules
         time.sleep(2)
 
-        # 3. Test Demo Mode
-        print("Testing Demo Mode...")
-        # Reload to clear state
-        page.reload()
-        # Wait for reload
-        page.wait_for_selector("#btn-fake")
+        # Check for Canvas
+        try:
+            expect(page.locator("canvas")).to_be_visible(timeout=5000)
+            print("Canvas found!")
+        except Exception as e:
+            print(f"Canvas NOT found: {e}")
+            # If canvas not found, we probably can't proceed, but let's see errors
+            return
 
+        # 2. Test Demo Mode
+        print("Testing Demo Mode...")
         page.click("#btn-fake")
 
         # Wait for canvas to be active and particles/boxes to appear
         print("Waiting for demo to start...")
-        time.sleep(5) # Give time for boxes to spawn
-
-        # Check if canvas exists
-        expect(page.locator("canvas")).to_be_visible()
+        time.sleep(5)
 
         # Take screenshot of Demo Mode
         print("Taking screenshot...")

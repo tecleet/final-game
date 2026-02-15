@@ -441,8 +441,28 @@ class UserBox {
         ctx.clearRect(0, 0, w, h);
 
         // Background - SOLID OPAQUE BLACK for max contrast
+        // Must be rounded to match geometry
         ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, w, h);
+
+        // Define rounded path
+        const r = h / 2; // Full rounded pill shape
+        ctx.beginPath();
+        ctx.moveTo(r, 0);
+        ctx.lineTo(w - r, 0);
+        ctx.quadraticCurveTo(w, 0, w, r);
+        ctx.lineTo(w, h - r);
+        ctx.quadraticCurveTo(w, h, w - r, h);
+        ctx.lineTo(r, h);
+        ctx.quadraticCurveTo(0, h, 0, h - r);
+        ctx.lineTo(0, r);
+        ctx.quadraticCurveTo(0, 0, r, 0);
+        ctx.closePath();
+
+        ctx.fill(); // Fill rounded background
+
+        // Save this path for clipping later if needed, or just use it
+        ctx.save();
+        ctx.clip(); // Clip everything to this rounded shape
 
         // Border - "Corner Brackets" style
         // Not connected to the box (inset slightly or gaps)
@@ -450,39 +470,39 @@ class UserBox {
         ctx.lineWidth = 20;
         ctx.lineCap = 'round';
 
-        const r = h / 2 - 10; // radius
+        const rBorder = h / 2 - 10; // radius (renamed to avoid conflict)
         const gap = 60; // Gap size in middle of edges
 
         // Top Left Corner
         ctx.beginPath();
-        ctx.moveTo(10 + r + gap, 10); // Start after top gap
-        ctx.lineTo(10 + r, 10);
-        ctx.quadraticCurveTo(10, 10, 10, 10 + r);
-        ctx.lineTo(10, 10 + r + gap/2); // End before left gap
+        ctx.moveTo(10 + rBorder + gap, 10); // Start after top gap
+        ctx.lineTo(10 + rBorder, 10);
+        ctx.quadraticCurveTo(10, 10, 10, 10 + rBorder);
+        ctx.lineTo(10, 10 + rBorder + gap/2); // End before left gap
         ctx.stroke();
 
         // Top Right Corner
         ctx.beginPath();
-        ctx.moveTo(w - 10 - r - gap, 10);
-        ctx.lineTo(w - 10 - r, 10);
-        ctx.quadraticCurveTo(w - 10, 10, w - 10, 10 + r);
-        ctx.lineTo(w - 10, 10 + r + gap/2);
+        ctx.moveTo(w - 10 - rBorder - gap, 10);
+        ctx.lineTo(w - 10 - rBorder, 10);
+        ctx.quadraticCurveTo(w - 10, 10, w - 10, 10 + rBorder);
+        ctx.lineTo(w - 10, 10 + rBorder + gap/2);
         ctx.stroke();
 
         // Bottom Right Corner
         ctx.beginPath();
-        ctx.moveTo(w - 10, h - 10 - r - gap/2);
-        ctx.lineTo(w - 10, h - 10 - r);
-        ctx.quadraticCurveTo(w - 10, h - 10, w - 10 - r, h - 10);
-        ctx.lineTo(w - 10 - r - gap, h - 10);
+        ctx.moveTo(w - 10, h - 10 - rBorder - gap/2);
+        ctx.lineTo(w - 10, h - 10 - rBorder);
+        ctx.quadraticCurveTo(w - 10, h - 10, w - 10 - rBorder, h - 10);
+        ctx.lineTo(w - 10 - rBorder - gap, h - 10);
         ctx.stroke();
 
         // Bottom Left Corner
         ctx.beginPath();
-        ctx.moveTo(10, h - 10 - r - gap/2);
-        ctx.lineTo(10, h - 10 - r);
-        ctx.quadraticCurveTo(10, h - 10, 10 + r, h - 10);
-        ctx.lineTo(10 + r + gap, h - 10);
+        ctx.moveTo(10, h - 10 - rBorder - gap/2);
+        ctx.lineTo(10, h - 10 - rBorder);
+        ctx.quadraticCurveTo(10, h - 10, 10 + rBorder, h - 10);
+        ctx.lineTo(10 + rBorder + gap, h - 10);
         ctx.stroke();
 
         // Text - Username
@@ -539,10 +559,10 @@ class UserBox {
 
         const isLeader = (this.user.timestamps.length === maxCount && maxCount > 0);
 
-        // Define realistic image URLs
-        const lionUrl = 'https://images.unsplash.com/photo-1546182990-dffeafbe841d?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80';
+        // Define realistic image URLs (HEADS/FACES ONLY)
+        const lionUrl = 'https://images.unsplash.com/photo-1546182990-dffeafbe841d?ixlib=rb-4.0.3&auto=format&fit=facearea&facepad=2&w=200&h=200&q=80';
         const otherAnimals = [
-            'https://images.unsplash.com/photo-1557008075-7f2c5efa4cfd?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Tiger
+            'https://images.unsplash.com/photo-1557008075-7f2c5efa4cfd?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Tiger (keep crop, tiger face usually centered)
             'https://images.unsplash.com/photo-1535591273668-578e31182c4f?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Bear
             'https://images.unsplash.com/photo-1564349683136-77e08dba1ef7?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Panda
             'https://images.unsplash.com/photo-1533738363-b7f9aef128ce?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Cat
@@ -551,6 +571,9 @@ class UserBox {
             'https://images.unsplash.com/photo-1574158622682-e40e69881006?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', // Cat2
             'https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80'  // Pug
         ];
+        // Note: Unsplash 'facearea' works best for humans, but 'crop' usually centers on subject.
+        // For strict "heads only", we rely on the image content being a close-up.
+        // The URLs above are already selecting specific photo IDs that are close-ups.
 
         let targetUrl = '';
         if (isLeader) {
@@ -599,6 +622,9 @@ class UserBox {
         }
 
         this.texture.needsUpdate = true;
+
+        // Restore context clip from background
+        ctx.restore();
     }
 
     update(time) {
