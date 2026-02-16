@@ -7,12 +7,12 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 // --- CONFIGURATION ---
 const CONFIG = {
     PARTICLE_COUNT: 1000,
-    BLOOM_STRENGTH: 0.6, // Reduced further for clearer text
+    BLOOM_STRENGTH: 0.6,
     BLOOM_RADIUS: 0.4,
-    BLOOM_THRESHOLD: 0.1, // Only bloom bright parts
+    BLOOM_THRESHOLD: 0.1,
     FOV: 60,
-    CAMERA_Z: 60, // Pulled back slightly for more view
-    COLORS: [0x00ffff, 0xff00ff, 0xbc13fe, 0x00ffaa] // Added Neon Green
+    CAMERA_Z: 60,
+    COLORS: [0x00ffff, 0xff00ff, 0xbc13fe, 0x00ffaa]
 };
 
 // --- GLOBALS ---
@@ -22,24 +22,19 @@ const clock = new THREE.Clock();
 
 // --- INITIALIZATION ---
 function init() {
-    // 1. Scene
     scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x050505, 0.0015); // Cyberpunk fog
+    scene.fog = new THREE.FogExp2(0x050505, 0.0015);
 
-    // 2. Camera
     camera = new THREE.PerspectiveCamera(CONFIG.FOV, window.innerWidth / window.innerHeight, 1, 1000);
     camera.position.z = CONFIG.CAMERA_Z;
 
-    // 3. Renderer
     renderer = new THREE.WebGLRenderer({ antialias: false });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setClearColor(0x050505);
     document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-    // 4. Post-processing (Bloom)
     const renderScene = new RenderPass(scene, camera);
-
     const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
     bloomPass.threshold = CONFIG.BLOOM_THRESHOLD;
     bloomPass.strength = CONFIG.BLOOM_STRENGTH;
@@ -49,20 +44,13 @@ function init() {
     composer.addPass(renderScene);
     composer.addPass(bloomPass);
 
-    // 5. Background Particles
     createParticles();
 
-    // 6. Lights
     const ambientLight = new THREE.AmbientLight(0x404040);
     scene.add(ambientLight);
 
-    // 7. Event Listeners
     window.addEventListener('resize', onWindowResize);
-
-    // 8. Setup UI
     setupUI();
-
-    // 9. Start Loop
     animate();
 }
 
@@ -77,7 +65,6 @@ function createParticles() {
         const y = (Math.random() - 0.5) * 200;
         const z = (Math.random() - 0.5) * 100 - 50;
         positions.push(x, y, z);
-
         color.setHex(CONFIG.COLORS[Math.floor(Math.random() * CONFIG.COLORS.length)]);
         colors.push(color.r, color.g, color.b);
     }
@@ -106,23 +93,16 @@ function onWindowResize() {
 
 function animate() {
     requestAnimationFrame(animate);
-
     const time = clock.getElapsedTime();
 
     // Liquid/Flow Background
     if (particles) {
-        // More organic wave movement instead of simple rotation
         const positions = particles.geometry.attributes.position.array;
         for (let i = 0; i < CONFIG.PARTICLE_COUNT; i++) {
             const i3 = i * 3;
-            // Original positions are not stored, so we drift them
-            // Or better, use sine waves on Y based on X and Z
-            // Simple flow:
             positions[i3 + 1] += Math.sin(time * 0.5 + positions[i3] * 0.05) * 0.1;
         }
         particles.geometry.attributes.position.needsUpdate = true;
-
-        // Slow rotation
         particles.rotation.z = Math.sin(time * 0.1) * 0.1;
     }
 
@@ -145,110 +125,63 @@ function animate() {
     composer.render();
 }
 
-// --- YOUTUBE API CLIENT ---
-class YouTubeClient {
-    constructor(apiKey) {
-        this.apiKey = apiKey;
-        this.baseUrl = 'https://www.googleapis.com/youtube/v3';
+// --- WEBSOCKET CLIENT ---
+class WebSocketClient {
+    constructor(url, statusCallback) {
+        this.url = url;
+        this.ws = null;
+        this.statusCallback = statusCallback;
     }
 
-    async fetchLiveChatId(videoId) {
-        console.log("Fetching LiveChat ID for Video:", videoId);
-        const url = `${this.baseUrl}/videos?part=liveStreamingDetails,snippet&id=${videoId}&key=${this.apiKey}`;
-
-        try {
-            const response = await fetch(url);
-            console.log("Videos API Response Status:", response.status);
-
-            if (!response.ok) {
-                const errData = await response.json().catch(() => ({}));
-                const errMsg = errData.error?.message || response.statusText;
-
-                if (response.status === 403) {
-                    throw new Error("API key invalid OR HTTP referrer restriction in Google Cloud Console.");
-                } else if (response.status === 404) {
-                    throw new Error("Video not found (404).");
-                } else if (response.status === 400) {
-                    throw new Error("Invalid request parameters (400). Check Video ID.");
-                }
-                throw new Error(`API Error ${response.status}: ${errMsg}`);
-            }
-
-            const data = await response.json();
-            if (data.items && data.items.length > 0) {
-                const item = data.items[0];
-                const snippet = item.snippet;
-                const details = item.liveStreamingDetails;
-
-                // Strict check: Is it actually live?
-                // Note: Sometimes API returns 'none' or 'upcoming'
-                if (snippet && snippet.liveBroadcastContent === 'none') {
-                     throw new Error("Stream is OFFLINE (liveBroadcastContent: none).");
-                }
-
-                if (details && details.activeLiveChatId) {
-                    console.log("Found Active LiveChat ID:", details.activeLiveChatId);
-                    return details.activeLiveChatId;
-                } else {
-                    throw new Error("No active live chat found. Is the video live?");
-                }
-            } else {
-                throw new Error("Video not found.");
-            }
-        } catch (error) {
-            console.error("Error fetching Live Chat ID:", error);
-            if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-                const domain = window.location.hostname;
-                throw new Error(`Network error OR API key referrer restriction. Ensure '${domain}' is allowed in Google Cloud Console.`);
-            }
-            throw error;
-        }
-    }
-
-    async fetchMessages(liveChatId, pageToken = '') {
-        console.log("Fetching messages for Chat ID:", liveChatId);
-        let url = `${this.baseUrl}/liveChatMessages?part=snippet,authorDetails&liveChatId=${liveChatId}&key=${this.apiKey}`;
-        if (pageToken) {
-            url += `&pageToken=${pageToken}`;
+    connect(videoId) {
+        if (this.ws) {
+            this.ws.close();
         }
 
         try {
-            const response = await fetch(url);
-            console.log("Chat API Response Status:", response.status);
-
-            if (!response.ok) {
-                if (response.status === 403) {
-                     throw new Error("API key invalid OR HTTP referrer restriction in Google Cloud Console.");
-                }
-                if (response.status === 404) {
-                     throw new Error("Stream offline OR invalid liveChatId.");
-                }
-                if (response.status === 400) {
-                     throw new Error("Invalid request parameters.");
-                }
-                const errData = await response.json().catch(() => ({}));
-                throw new Error(errData.error?.message || `API Error: ${response.status} ${response.statusText}`);
-            }
-
-            const data = await response.json();
-
-            if (data.error) {
-                throw new Error(data.error.message);
-            }
-
-            return {
-                messages: data.items || [],
-                nextPageToken: data.nextPageToken,
-                pollingIntervalMillis: data.pollingIntervalMillis || 5000
-            };
-        } catch (error) {
-            console.error("Error fetching messages:", error);
-            if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-                 const domain = window.location.hostname;
-                 throw new Error(`Network error OR API key referrer restriction. Ensure '${domain}' is allowed in Google Cloud Console.`);
-            }
-            throw error;
+            this.ws = new WebSocket(this.url);
+        } catch (e) {
+            this.statusCallback("Invalid WebSocket URL", true);
+            return;
         }
+
+        this.ws.onopen = () => {
+            this.statusCallback("Connected to Backend...", false);
+            this.ws.send(JSON.stringify({ type: 'CONNECT', videoId: videoId }));
+        };
+
+        this.ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'chat') {
+                    if (data.messages && dataManager) {
+                        dataManager.processMessages(data.messages);
+                        const count = data.messages.length;
+                        this.statusCallback(`LIVE: Received ${count} msgs`, false);
+                    }
+                } else if (data.type === 'status') {
+                    this.statusCallback(data.message, false);
+                } else if (data.type === 'error') {
+                    this.statusCallback("ERROR: " + data.message, true);
+                }
+            } catch (e) {
+                console.error("WS Parse Error", e);
+            }
+        };
+
+        this.ws.onerror = (error) => {
+            console.error("WS Error", error);
+            this.statusCallback("WebSocket Connection Failed. Is the backend running?", true);
+        };
+
+        this.ws.onclose = () => {
+            this.statusCallback("Disconnected from Backend.", true);
+        };
+    }
+
+    close() {
+        if (this.ws) this.ws.close();
     }
 }
 
@@ -263,7 +196,6 @@ class FakeDataGenerator {
     start(callback) {
         this.stop();
         const loop = () => {
-            // Flood Simulation: Faster comments (100ms - 800ms)
             const delay = Math.random() * 700 + 100;
             this.interval = setTimeout(() => {
                 const msg = this.generateMessage();
@@ -282,7 +214,6 @@ class FakeDataGenerator {
         const username = this.usernames[Math.floor(Math.random() * this.usernames.length)];
         const userId = 'user_' + username.toLowerCase();
         const comment = this.comments[Math.floor(Math.random() * this.comments.length)];
-
         return {
             snippet: {
                 publishedAt: new Date().toISOString(),
@@ -310,7 +241,6 @@ class DataManager {
 
     processMessages(messages) {
         const now = Date.now();
-
         messages.forEach(msg => {
             const userId = msg.authorDetails.channelId;
             const username = msg.authorDetails.displayName;
@@ -327,27 +257,20 @@ class DataManager {
                 if (this.userOrder.length >= this.maxUsers) {
                     this.removeOldestUser();
                 }
-
                 const newUser = {
-                    userId,
-                    username,
-                    avatar,
+                    userId, username, avatar,
                     timestamps: [now],
                     box: null,
                     insertedAt: now
                 };
-
                 this.activeUsers.set(userId, newUser);
                 this.userOrder.push(userId);
                 this.createUserVisuals(newUser);
                 if (window.audioManager) window.audioManager.playGlitch();
             }
 
-            // Add to Ladder Log (for both new and existing users if they comment)
             if (this.activeUsers.has(userId)) {
                  const u = this.activeUsers.get(userId);
-                 // We don't have msg.snippet.displayMessage here directly in the loop above?
-                 // Wait, 'msg' is in scope.
                  this.addCommentToLadder(msg.snippet.displayMessage, u.box ? u.box.userColor : '#ffffff');
             }
         });
@@ -356,7 +279,6 @@ class DataManager {
     cleanupCounts() {
         const now = Date.now();
         const cutoff = now - (this.windowSeconds * 1000);
-
         this.activeUsers.forEach(user => {
             const originalCount = user.timestamps.length;
             user.timestamps = user.timestamps.filter(t => t > cutoff);
@@ -378,22 +300,15 @@ class DataManager {
     }
 
     createUserVisuals(user) {
-        if (scene) {
-            user.box = new UserBox(user, scene);
-        }
+        if (scene) user.box = new UserBox(user, scene);
     }
 
     updateUserVisuals(user) {
-        if (user.box) {
-            user.box.updateTexture();
-        }
+        if (user.box) user.box.updateTexture();
     }
 
-    // Helper to add latest message to ladder
     addCommentToLadder(text, color) {
-        if (window.commentLog) {
-            window.commentLog.add(text, color);
-        }
+        if (window.commentLog) window.commentLog.add(text, color);
     }
 
     removeUserVisuals(user) {
@@ -406,97 +321,73 @@ class DataManager {
 
 const dataManager = new DataManager();
 
-// --- USER BOX VISUALIZATION (IMPROVED) ---
+// --- USER BOX VISUALIZATION ---
 class UserBox {
     constructor(user, scene) {
         this.user = user;
         this.scene = scene;
         this.group = new THREE.Group();
-
-        // Dimensions
         this.width = 7;
         this.height = 2.4;
         this.depth = 0.2;
 
-        // 1. High-Res Canvas for Crisp Text
         this.canvas = document.createElement('canvas');
-        this.canvas.width = 1024; // 2x resolution
+        this.canvas.width = 1024;
         this.canvas.height = 350;
         this.ctx = this.canvas.getContext('2d');
 
         this.texture = new THREE.CanvasTexture(this.canvas);
         this.texture.minFilter = THREE.LinearFilter;
-        this.texture.magFilter = THREE.LinearFilter; // Smooth scaling
+        this.texture.magFilter = THREE.LinearFilter;
 
-        // Pick random neon color
         const colors = ['#00ffff', '#ff00ff', '#bc13fe', '#00ffaa', '#ffaa00', '#ff3333'];
         this.userColor = colors[Math.floor(Math.random() * colors.length)];
-        this.borderColor = new THREE.Color(this.userColor); // For trails
+        this.borderColor = new THREE.Color(this.userColor);
 
-        // Use MeshBasicMaterial with Emissive map if possible, but texture map is emissive enough
-        // Using BasicMaterial ensures it ignores lighting and glows with bloom
         const material = new THREE.MeshBasicMaterial({
             map: this.texture,
             transparent: true,
-            opacity: 1.0, // Ensure full opacity
-            side: THREE.DoubleSide // Plane needs double side to be seen if rotation flips
+            opacity: 1.0,
+            side: THREE.DoubleSide
         });
 
-        // Use PlaneGeometry instead of Box to eliminate "rectangle border" artifacts from depth
         const geometry = new THREE.PlaneGeometry(this.width, this.height);
         this.mesh = new THREE.Mesh(geometry, material);
         this.group.add(this.mesh);
 
-        // 3. Initial Position & Movement Setup (Improved)
-        // Spread across wider area
         this.group.position.set(
             (Math.random() - 0.5) * 60,
             (Math.random() - 0.5) * 40,
             (Math.random() - 0.5) * 30
         );
 
-        // Physics-based Movement (Wall Bounce)
         this.velocity = new THREE.Vector3(
-            (Math.random() - 0.5) * 0.1, // Reduced initial speed
+            (Math.random() - 0.5) * 0.1,
             (Math.random() - 0.5) * 0.1,
             (Math.random() - 0.5) * 0.05
         );
         this.speed = 1.0;
-
-        // Target Scale
         this.targetScale = 1.0;
         this.currentScale = 1.0;
 
-        // 5. Add to Scene
         scene.add(this.group);
-
-        // 6. Render Initial Texture
         this.updateTexture();
-
-        // 7. Trail System
         this.trailPoints = [];
         this.lastTrailTime = 0;
     }
 
     updateTexture() {
         const count = this.user.timestamps.length;
-        // More aggressive scaling for higher counts
-        // Starts at 1.0, adds 0.2 per count, max 3x size
         this.targetScale = 1.0 + Math.min((count - 1) * 0.2, 2.0);
 
         const ctx = this.ctx;
         const w = this.canvas.width;
         const h = this.canvas.height;
 
-        // Clear
         ctx.clearRect(0, 0, w, h);
-
-        // Background - SOLID OPAQUE BLACK for max contrast
-        // Must be rounded to match geometry
         ctx.fillStyle = '#000000';
 
-        // Define rounded path
-        const r = h / 2; // Full rounded pill shape
+        const r = h / 2;
         ctx.beginPath();
         ctx.moveTo(r, 0);
         ctx.lineTo(w - r, 0);
@@ -509,17 +400,14 @@ class UserBox {
         ctx.quadraticCurveTo(0, 0, r, 0);
         ctx.closePath();
 
-        ctx.fill(); // Fill rounded background
-
-        // Save this path for clipping later if needed, or just use it
+        ctx.fill();
         ctx.save();
-        ctx.clip(); // Clip everything to this rounded shape
+        ctx.clip();
 
-        // Border - Thin Connected Round Border
         ctx.strokeStyle = this.userColor;
         ctx.lineWidth = 6;
 
-        const rBorder = h / 2 - 5; // Almost full height radius
+        const rBorder = h / 2 - 5;
         ctx.beginPath();
         ctx.moveTo(rBorder, 5);
         ctx.lineTo(w - rBorder, 5);
@@ -533,22 +421,18 @@ class UserBox {
         ctx.closePath();
         ctx.stroke();
 
-        // Text - Count (Right Aligned - Measure first to reserve space)
         ctx.font = 'bold 160px Orbitron, sans-serif';
         const countStr = this.user.timestamps.length.toString();
         const countWidth = ctx.measureText(countStr).width;
-        const countX = w - 60; // Right padding
+        const countX = w - 60;
 
-        // Text - Username (Center Left - Dynamic Fit)
-        // Strict Zone Calculation
-        const avatarEnd = 120 + 80 + 20; // AvatarX + Radius + Padding
-        const countStart = countX - countWidth - 40; // CountX - Width - Padding
+        const avatarEnd = 120 + 80 + 20;
+        const countStart = countX - countWidth - 40;
         const maxTextWidth = countStart - avatarEnd;
 
         let fontSize = 100;
         ctx.font = `${fontSize}px Orbitron, sans-serif`;
 
-        // Truncate logic (10 chars max)
         const truncatedName = this.user.username.length > 10
             ? this.user.username.substring(0, 10)
             : this.user.username;
@@ -561,21 +445,18 @@ class UserBox {
             textWidth = ctx.measureText(finalName).width;
         }
 
-        ctx.fillStyle = this.userColor || '#ffffff'; // Sync with user color
+        ctx.fillStyle = this.userColor || '#ffffff';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.shadowBlur = 0;
 
-        // Draw Name
         ctx.fillText(finalName, avatarEnd, h / 2);
 
-        // Draw Count
         ctx.font = 'bold 160px Orbitron, sans-serif';
         ctx.fillStyle = this.userColor;
         ctx.textAlign = 'right';
         ctx.fillText(countStr, countX, h / 2 + 20);
 
-        // Avatar Placeholder (Circle) - LEFT
         const avatarX = 120;
         const avatarY = h / 2;
         const avatarR = 80;
@@ -584,12 +465,10 @@ class UserBox {
         ctx.arc(avatarX, avatarY, avatarR, 0, Math.PI * 2);
         ctx.fillStyle = '#333';
         ctx.fill();
-        ctx.strokeStyle = this.userColor; // Sync circle
+        ctx.strokeStyle = this.userColor;
         ctx.lineWidth = 4;
         ctx.stroke();
 
-        // ANIMAL ICON LOGIC (REALISTIC IMAGES)
-        // "Number one claims lion icon"
         let maxCount = 0;
         dataManager.activeUsers.forEach(u => {
             if (u.timestamps.length > maxCount) maxCount = u.timestamps.length;
@@ -597,18 +476,16 @@ class UserBox {
 
         const isLeader = (this.user.timestamps.length === maxCount && maxCount > 0);
 
-        // Define realistic image URLs (Curated Close-Up Animal Faces)
-        // Using explicit crop parameters to zoom into faces
         const lionUrl = 'https://images.unsplash.com/photo-1546182990-dffeafbe841d?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80&crop=faces';
         const otherAnimals = [
-            'https://images.unsplash.com/photo-1505672984959-1c07309e4694?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80', // Wolf Face
-            'https://images.unsplash.com/photo-1557008075-7f2c5efa4cfd?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80', // Tiger Face
-            'https://images.unsplash.com/photo-1578165272330-802e3a0937a2?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80', // Fox Face
-            'https://images.unsplash.com/photo-1615963244664-5b845b2025ee?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80', // Owl Face
-            'https://images.unsplash.com/photo-1522502693259-26ddcfc24e64?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80', // Dog Face
-            'https://images.unsplash.com/photo-1574158622682-e40e69881006?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80', // Cat Eyes
-            'https://images.unsplash.com/photo-1564349683136-77e08dba1ef7?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80', // Panda Face
-            'https://images.unsplash.com/photo-1530595467537-0b5996c41f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80'  // Bear Face
+            'https://images.unsplash.com/photo-1505672984959-1c07309e4694?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80',
+            'https://images.unsplash.com/photo-1557008075-7f2c5efa4cfd?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80',
+            'https://images.unsplash.com/photo-1578165272330-802e3a0937a2?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80',
+            'https://images.unsplash.com/photo-1615963244664-5b845b2025ee?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80',
+            'https://images.unsplash.com/photo-1522502693259-26ddcfc24e64?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80',
+            'https://images.unsplash.com/photo-1574158622682-e40e69881006?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80',
+            'https://images.unsplash.com/photo-1564349683136-77e08dba1ef7?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80',
+            'https://images.unsplash.com/photo-1530595467537-0b5996c41f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&h=256&q=80'
         ];
 
         let targetUrl = '';
@@ -623,9 +500,7 @@ class UserBox {
             targetUrl = otherAnimals[index];
         }
 
-        // Load & Draw Image
         if (!this.animalImg || this.animalImgSrc !== targetUrl) {
-            // Need to load new image
             if (!this.loadingAnimal) {
                 this.loadingAnimal = true;
                 const img = new Image();
@@ -633,9 +508,9 @@ class UserBox {
                 img.src = targetUrl;
                 img.onload = () => {
                     this.animalImg = img;
-                    this.animalImgSrc = targetUrl; // Cache key
+                    this.animalImgSrc = targetUrl;
                     this.loadingAnimal = false;
-                    this.updateTexture(); // Redraw
+                    this.updateTexture();
                 };
             }
         }
@@ -645,11 +520,9 @@ class UserBox {
             ctx.beginPath();
             ctx.arc(avatarX, avatarY, avatarR, 0, Math.PI * 2);
             ctx.clip();
-            // Draw image covering the circle
             ctx.drawImage(this.animalImg, avatarX - avatarR, avatarY - avatarR, avatarR * 2, avatarR * 2);
             ctx.restore();
         } else {
-            // Fallback while loading
             ctx.font = '60px Orbitron';
             ctx.fillStyle = '#666';
             ctx.textAlign = 'center';
@@ -658,49 +531,32 @@ class UserBox {
         }
 
         this.texture.needsUpdate = true;
-
-        // Restore context clip from background
         ctx.restore();
     }
 
     update(time) {
-        // Smooth Scale Transition
         this.currentScale += (this.targetScale - this.currentScale) * 0.1;
         this.group.scale.set(this.currentScale, this.currentScale, this.currentScale);
 
-        // --- WALL BOUNCE PHYSICS ---
-
-        // 1. Calculate Frustum Size at Box's Depth
-        // Distance from camera to box plane (approx)
         const dist = camera.position.z - this.group.position.z;
-        const vFOV = THREE.MathUtils.degToRad(camera.fov); // vertical field of view
-
-        // Visible height at this distance
+        const vFOV = THREE.MathUtils.degToRad(camera.fov);
         const visibleHeight = 2 * Math.tan(vFOV / 2) * dist;
-        // Visible width
         const visibleWidth = visibleHeight * camera.aspect;
 
-        // Half dimensions for bounds
         const xBound = visibleWidth / 2 - (this.width * this.currentScale) / 2;
         const yBound = visibleHeight / 2 - (this.height * this.currentScale) / 2;
-        // Z bounds (arbitrary depth volume)
         const zFront = 20;
         const zBack = -40;
 
-        // 2. Add small random acceleration (Brownian motion)
         this.velocity.x += (Math.random() - 0.5) * 0.002;
         this.velocity.y += (Math.random() - 0.5) * 0.002;
         this.velocity.z += (Math.random() - 0.5) * 0.001;
 
-        // Limit speed
         const maxSpeed = 0.15;
         this.velocity.clampLength(0, maxSpeed);
 
-        // 3. Move
         this.group.position.add(this.velocity);
 
-        // 4. Check Collisions & Bounce
-        // X
         if (this.group.position.x > xBound) {
             this.group.position.x = xBound;
             this.velocity.x *= -1;
@@ -709,7 +565,6 @@ class UserBox {
             this.velocity.x *= -1;
         }
 
-        // Y
         if (this.group.position.y > yBound) {
             this.group.position.y = yBound;
             this.velocity.y *= -1;
@@ -718,7 +573,6 @@ class UserBox {
             this.velocity.y *= -1;
         }
 
-        // Z
         if (this.group.position.z > zFront) {
             this.group.position.z = zFront;
             this.velocity.z *= -1;
@@ -727,10 +581,6 @@ class UserBox {
             this.velocity.z *= -1;
         }
 
-        // Face camera (Optional: might look weird if strictly 2D bounce, but requested 3D box)
-        // this.group.lookAt(camera.position); // Actually, keep it flat facing camera usually looks best for text
-
-        // Spawn Trail Particle
         if (time - this.lastTrailTime > 0.08) {
              this.spawnTrailParticle();
              this.lastTrailTime = time;
@@ -738,19 +588,7 @@ class UserBox {
     }
 
     spawnTrailParticle() {
-        // Rounded Trail: Match the box geometry roughly with a Circle or Rounded Plane
-        // Since RoundedPlane isn't a standard primitive easily, we use a Circle scaled
-        // to approximate the pill shape, or just a lower opacity version of the RoundedBox texture?
-        // Let's use CircleGeometry for "bubbles" trail or Plane with Rounded Texture
-        // Simpler: Use a Plane but apply a circular soft gradient map?
-        // User asked for "trail animation of the moving boxex".
-        // Let's stick to the Ghost Effect (Plane) but make it rounder by using a texture or just Circle
-
         const scale = this.currentScale;
-        // Use a simple Plane but maybe with a rounded texture if we had one.
-        // For performance, let's use a Circle scaled to be an ellipse matching the box aspect ratio
-        // Box is 7 x 2.4. Aspect ~2.9
-
         const geo = new THREE.CircleGeometry(1, 16);
         const mat = new THREE.MeshBasicMaterial({
             color: this.borderColor,
@@ -759,17 +597,15 @@ class UserBox {
             side: THREE.DoubleSide
         });
         const mesh = new THREE.Mesh(geo, mat);
-
         mesh.scale.set((this.width * scale) / 2, (this.height * scale) / 2, 1);
-
         mesh.position.copy(this.group.position);
         mesh.rotation.copy(this.group.rotation);
-        mesh.position.z -= 0.5; // Behind
+        mesh.position.z -= 0.5;
 
         scene.add(mesh);
 
         const fade = () => {
-            mat.opacity -= 0.015; // Slower fade for longer trail
+            mat.opacity -= 0.015;
             mesh.scale.multiplyScalar(0.96);
             if (mat.opacity <= 0) {
                 scene.remove(mesh);
@@ -794,11 +630,10 @@ class UserBox {
 class CommentLog {
     constructor(scene) {
         this.scene = scene;
-        this.messages = []; // { mesh, startTime, text }
+        this.messages = [];
     }
 
     add(text, color) {
-        // Create canvas texture for text
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         canvas.width = 1024;
@@ -806,10 +641,8 @@ class CommentLog {
 
         ctx.clearRect(0,0, 1024, 128);
 
-        // Dark Background Plate for Readability
         ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
         ctx.beginPath();
-        // Rounded rect centered
         const plateW = 900;
         const plateH = 100;
         const radius = 40;
@@ -828,39 +661,33 @@ class CommentLog {
         ctx.closePath();
         ctx.fill();
 
-        // Text Settings
         ctx.font = 'bold 50px Orbitron';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        // Stroke for contrast
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 4;
         ctx.strokeText(text.substring(0, 50), 512, 64);
 
-        // Main Text (No Shadow/Bloom on texture to avoid "too much light")
         ctx.shadowBlur = 0;
         ctx.fillStyle = color;
         ctx.fillText(text.substring(0, 50), 512, 64);
 
         const tex = new THREE.CanvasTexture(canvas);
         tex.minFilter = THREE.LinearFilter;
-        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0 }); // Start invisible, fade in
+        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0 });
         const sprite = new THREE.Sprite(mat);
 
-        // Initial spawn position (will be overridden by update)
         sprite.position.set(0, -60, -60);
 
         this.scene.add(sprite);
 
-        // Add to BEGINNING of array (Stack bottom)
         this.messages.unshift({
             mesh: sprite,
             created: clock.getElapsedTime(),
             color: color
         });
 
-        // Limit Stack Size (Increased for flood)
         if (this.messages.length > 100) {
             const removed = this.messages.pop();
             this.disposeMessage(removed);
@@ -868,36 +695,24 @@ class CommentLog {
     }
 
     update(time) {
-        // Stack Logic: Position based on Index
-        // Index 0 is newest (Bottom)
-        // Index N is oldest (Top/Back)
-
-        const spacingY = 4; // Tighter vertical gap
-        const spacingZ = 2; // Tighter depth gap
+        const spacingY = 4;
+        const spacingZ = 2;
         const baseY = -45;
         const baseZ = -60;
 
         this.messages.forEach((m, index) => {
-            // Target Positions
             const targetY = baseY + (index * spacingY);
             const targetZ = baseZ - (index * spacingZ);
 
-            // Lerp Position
             m.mesh.position.y += (targetY - m.mesh.position.y) * 0.1;
             m.mesh.position.z += (targetZ - m.mesh.position.z) * 0.1;
 
-            // Scale Calculation
-            // Shrink as index increases (further back)
-            // Base scale 2.5x (from previous tweak)
             const baseScale = 2.5;
-            const scaleDecay = 0.01; // Slower shrink (1% per step)
+            const scaleDecay = 0.01;
             const s = Math.max(0.1, 1.0 - (index * scaleDecay));
 
             m.mesh.scale.set(40 * baseScale * s, 5 * baseScale * s, 1);
 
-            // Fade In/Out
-            // Fade in if new (opacity < 1)
-            // Fade out if near limit (start fading at 80)
             let targetOpacity = 1.0;
             if (index > 80) targetOpacity = 0;
 
@@ -912,19 +727,8 @@ class CommentLog {
             if (m.mesh.material) m.mesh.material.dispose();
         }
     }
-
-    removeMessage(index) {
-        const m = this.messages[index];
-        if (m && m.mesh) {
-            this.scene.remove(m.mesh);
-            if (m.mesh.material.map) m.mesh.material.map.dispose();
-            if (m.mesh.material) m.mesh.material.dispose();
-        }
-        this.messages.splice(index, 1);
-    }
 }
 
-// Init logic wrapper
 function initApp() {
     init();
     window.commentLog = new CommentLog(scene);
@@ -939,30 +743,14 @@ function setupUI() {
     const btnConnect = document.getElementById('btn-connect');
     const btnFake = document.getElementById('btn-fake');
     const inputVideoId = document.getElementById('video-id');
-    const inputApiKey = document.getElementById('api-key');
+    const inputBackend = document.getElementById('backend-url');
     const statusDiv = document.getElementById('status');
     const panel = document.querySelector('.panel');
     const btnToggle = document.getElementById('btn-toggle-ui');
-    const helpBtn = document.getElementById('help-btn');
 
-    const savedKey = localStorage.getItem('yt_api_key');
-    if (savedKey) inputApiKey.value = savedKey;
+    const savedUrl = localStorage.getItem('backend_url');
+    if (savedUrl && inputBackend) inputBackend.value = savedUrl;
 
-    // Help Button Logic
-    helpBtn.addEventListener('click', () => {
-        const domain = window.location.hostname || 'localhost';
-        alert(
-            `CORS CONFIGURATION HELP:\n\n` +
-            `If you see "Network/CORS Error", you must update your API Key settings.\n\n` +
-            `1. Go to Google Cloud Console > Credentials.\n` +
-            `2. Edit your API Key.\n` +
-            `3. Under "Website Restrictions", ADD this domain:\n` +
-            `   ${window.location.protocol}//${domain}/*\n\n` +
-            `Note: "GitHub Secrets" cannot be used for client-side apps like this. You must rely on domain restrictions.`
-        );
-    });
-
-    // Toggle Button Logic
     btnToggle.addEventListener('click', () => {
         panel.classList.toggle('hidden');
     });
@@ -970,76 +758,49 @@ function setupUI() {
     btnFake.addEventListener('click', () => {
         statusDiv.textContent = "MODE: DEMO (FAKE DATA)";
         statusDiv.style.color = "#bc13fe";
-        panel.classList.add('hidden'); // Auto-hide on start
+        panel.classList.add('hidden');
 
         if (pollingInterval) clearTimeout(pollingInterval);
+        if (typeof wsClient !== 'undefined' && wsClient) wsClient.close();
 
         const generator = new FakeDataGenerator();
         generator.start((messages) => {
-            dataManager.processMessages(messages);
+            if (dataManager) dataManager.processMessages(messages);
         });
     });
 
-    btnConnect.addEventListener('click', async () => {
-        const videoId = inputVideoId.value.trim();
-        const apiKey = inputApiKey.value.trim();
+    let wsClient = null;
 
-        if (!videoId || !apiKey) {
-            statusDiv.textContent = "ERROR: Missing ID or Key";
-            statusDiv.style.color = "red";
-            return;
-        }
+    if (btnConnect) {
+        btnConnect.addEventListener('click', () => {
+            const videoId = inputVideoId.value.trim();
+            const backendUrl = inputBackend.value.trim();
 
-        localStorage.setItem('yt_api_key', apiKey);
+            if (!videoId || !backendUrl) {
+                statusDiv.textContent = "ERROR: Missing ID or URL";
+                statusDiv.style.color = "red";
+                return;
+            }
 
-        statusDiv.textContent = "CONNECTING...";
-        statusDiv.style.color = "#0ff";
+            localStorage.setItem('backend_url', backendUrl);
 
-        if (pollingInterval) clearTimeout(pollingInterval);
+            if (pollingInterval) clearTimeout(pollingInterval);
 
-        const client = new YouTubeClient(apiKey);
+            statusDiv.textContent = "CONNECTING TO BACKEND...";
+            statusDiv.style.color = "#0ff";
 
-        try {
-            const liveChatId = await client.fetchLiveChatId(videoId);
-            statusDiv.textContent = "CONNECTED! Fetching...";
-            panel.classList.add('hidden');
-
-            let pageToken = '';
-
-            const poll = async () => {
-                try {
-                    const result = await client.fetchMessages(liveChatId, pageToken);
-
-                    dataManager.processMessages(result.messages);
-
-                    // Update state
-                    pageToken = result.nextPageToken;
-
-                    // STRICT Polling Interval Logic
-                    let delay = result.pollingIntervalMillis;
-                    if (!delay || delay < 1000) delay = 5000; // Safety default
-
-                    statusDiv.textContent = `LIVE: ${result.messages.length} msgs. Next: ${delay/1000}s`;
-
-                    pollingInterval = setTimeout(poll, delay);
-                } catch (err) {
-                    console.error("Polling Error:", err);
-                    statusDiv.textContent = "ERROR: " + err.message;
-                    statusDiv.style.color = "red";
-
-                    // Decide if we should retry or stop based on error type
-                    // For now, retry slower (10s)
-                    pollingInterval = setTimeout(poll, 10000);
+            const updateStatus = (msg, isError) => {
+                statusDiv.textContent = msg;
+                statusDiv.style.color = isError ? "red" : "#0ff";
+                if (!isError && msg.includes("Connected")) {
+                    panel.classList.add('hidden');
                 }
             };
 
-            poll();
-
-        } catch (error) {
-            statusDiv.textContent = "ERROR: " + error.message;
-            statusDiv.style.color = "red";
-        }
-    });
+            wsClient = new WebSocketClient(backendUrl, updateStatus);
+            wsClient.connect(videoId);
+        });
+    }
 }
 
 // --- AUDIO MANAGER ---
