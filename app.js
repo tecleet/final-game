@@ -830,8 +830,8 @@ class CommentLog {
             color: color
         });
 
-        // Limit Stack Size
-        if (this.messages.length > 20) {
+        // Limit Stack Size (Increased for flood)
+        if (this.messages.length > 100) {
             const removed = this.messages.pop();
             this.disposeMessage(removed);
         }
@@ -842,8 +842,8 @@ class CommentLog {
         // Index 0 is newest (Bottom)
         // Index N is oldest (Top/Back)
 
-        const spacingY = 8; // Vertical gap
-        const spacingZ = 5; // Depth gap
+        const spacingY = 4; // Tighter vertical gap
+        const spacingZ = 2; // Tighter depth gap
         const baseY = -45;
         const baseZ = -60;
 
@@ -860,16 +860,16 @@ class CommentLog {
             // Shrink as index increases (further back)
             // Base scale 2.5x (from previous tweak)
             const baseScale = 2.5;
-            const scaleDecay = 0.05; // 5% smaller per step
+            const scaleDecay = 0.01; // Slower shrink (1% per step)
             const s = Math.max(0.1, 1.0 - (index * scaleDecay));
 
             m.mesh.scale.set(40 * baseScale * s, 5 * baseScale * s, 1);
 
             // Fade In/Out
             // Fade in if new (opacity < 1)
-            // Fade out if near limit
+            // Fade out if near limit (start fading at 80)
             let targetOpacity = 1.0;
-            if (index > 15) targetOpacity = 0; // Fade out top 5
+            if (index > 80) targetOpacity = 0;
 
             m.mesh.material.opacity += (targetOpacity - m.mesh.material.opacity) * 0.1;
         });
@@ -913,9 +913,24 @@ function setupUI() {
     const statusDiv = document.getElementById('status');
     const panel = document.querySelector('.panel');
     const btnToggle = document.getElementById('btn-toggle-ui');
+    const helpBtn = document.getElementById('help-btn');
 
     const savedKey = localStorage.getItem('yt_api_key');
     if (savedKey) inputApiKey.value = savedKey;
+
+    // Help Button Logic
+    helpBtn.addEventListener('click', () => {
+        const domain = window.location.hostname || 'localhost';
+        alert(
+            `CORS CONFIGURATION HELP:\n\n` +
+            `If you see "Network/CORS Error", you must update your API Key settings.\n\n` +
+            `1. Go to Google Cloud Console > Credentials.\n` +
+            `2. Edit your API Key.\n` +
+            `3. Under "Website Restrictions", ADD this domain:\n` +
+            `   ${window.location.protocol}//${domain}/*\n\n` +
+            `Note: "GitHub Secrets" cannot be used for client-side apps like this. You must rely on domain restrictions.`
+        );
+    });
 
     // Toggle Button Logic
     btnToggle.addEventListener('click', () => {

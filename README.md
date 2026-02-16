@@ -43,17 +43,28 @@ Since you are on a Mac, Python is likely pre-installed. Follow these steps:
 
 ## Troubleshooting
 
-### API Connection Issues
+### API Connection Issues / GitHub Pages
 
-If you see errors in the console or the app doesn't connect:
+If you are running this on **GitHub Pages** (e.g., `https://yourname.github.io/repo/`) or seeing CORS errors:
 
 1.  **CORS Errors / 403 Forbidden:**
-    *   **API Key Restrictions:** If you restricted your API key to specific HTTP referrers, ensure you have added `http://localhost:8000` (or whatever port you are using) to the allowed list in the Google Cloud Console.
-    *   **Browser Extensions:** Sometimes ad-blockers or privacy extensions can interfere with API requests.
+    *   **The Problem:** Google blocks API requests from unauthorized websites.
+    *   **The Solution:** You **must** add your specific URL to the Google Cloud Console.
+        1. Go to [Google Cloud Console > APIs & Services > Credentials](https://console.cloud.google.com/apis/credentials).
+        2. Click the "Edit" (pencil) icon next to your API Key.
+        3. Under **Application restrictions**, select **Websites (HTTP referrers)**.
+        4. Click **ADD ITEM**.
+        5. Enter your URL exactly: e.g., `https://tecleet.github.io/*` (don't forget the `*` at the end).
+        6. Also add `http://localhost:8000/*` for local testing.
+        7. Click **SAVE**. It may take 5 minutes to propagate.
 
-2.  **404 Not Found:**
+2.  **Why not GitHub Secrets?**
+    *   **GitHub Secrets** are for *build scripts* (server-side). This is a *client-side* web app. The browser needs the API key to talk to YouTube. Even if you "hide" it in the code, it is visible in the Network tab.
+    *   **Security:** The correct way to secure a client-side key is by using the **Website Restrictions** (Referrers) mentioned above. This prevents others from using your key on *their* websites.
+
+3.  **404 Not Found:**
     *   **Video ID:** Double-check the Video ID. It must be for a **currently live** stream. Past livestreams (VODs) will not work with the Live Chat API endpoint used here.
     *   **Stream Offline:** The streamer may have ended the broadcast.
 
-3.  **Quota Exceeded (403):**
+4.  **Quota Exceeded (403):**
     *   The YouTube Data API has a daily quota. This app polls frequently. If you hit the limit, you will need to wait until the next day (Pacific Time) or use a different API key.
