@@ -164,7 +164,15 @@ class YouTubeClient {
 
             const data = await response.json();
             if (data.items && data.items.length > 0) {
-                const details = data.items[0].liveStreamingDetails;
+                const item = data.items[0];
+                const snippet = item.snippet;
+                const details = item.liveStreamingDetails;
+
+                // Strict check: Is it actually live?
+                if (snippet && snippet.liveBroadcastContent !== 'live') {
+                    throw new Error(`Video is '${snippet.liveBroadcastContent}', not 'live'. Visualizer only works for ACTIVE livestreams.`);
+                }
+
                 if (details && details.activeLiveChatId) {
                     return details.activeLiveChatId;
                 } else {
@@ -194,7 +202,11 @@ class YouTubeClient {
 
             if (!response.ok) {
                 if (response.status === 404) {
-                     throw new Error("Live Stream Ended or Invalid Chat ID.");
+                     // 404 on liveChatMessages usually means stream ended or chat closed
+                     throw new Error("Live Stream Ended (Chat Not Found). Stopping.");
+                }
+                if (response.status === 403) {
+                     throw new Error("API Quota Exceeded or Forbidden.");
                 }
                 const errData = await response.json().catch(() => ({}));
                 throw new Error(errData.error?.message || `API Error: ${response.status} ${response.statusText}`);
