@@ -153,13 +153,25 @@ class YouTubeClient {
     }
 
     async fetchLiveChatId(videoId) {
-        const url = `${this.baseUrl}/videos?part=liveStreamingDetails&id=${videoId}&key=${this.apiKey}`;
+        console.log("Fetching LiveChat ID for Video:", videoId);
+        const url = `${this.baseUrl}/videos?part=liveStreamingDetails,snippet&id=${videoId}&key=${this.apiKey}`;
+
         try {
             const response = await fetch(url);
+            console.log("Videos API Response Status:", response.status);
 
             if (!response.ok) {
                 const errData = await response.json().catch(() => ({}));
-                throw new Error(errData.error?.message || `API Error: ${response.status} ${response.statusText}`);
+                const errMsg = errData.error?.message || response.statusText;
+
+                if (response.status === 403) {
+                    throw new Error("API key invalid OR HTTP referrer restriction in Google Cloud Console.");
+                } else if (response.status === 404) {
+                    throw new Error("Video not found (404).");
+                } else if (response.status === 400) {
+                    throw new Error("Invalid request parameters (400). Check Video ID.");
+                }
+                throw new Error(`API Error ${response.status}: ${errMsg}`);
             }
 
             const data = await response.json();
@@ -169,11 +181,13 @@ class YouTubeClient {
                 const details = item.liveStreamingDetails;
 
                 // Strict check: Is it actually live?
-                if (snippet && snippet.liveBroadcastContent !== 'live') {
-                    throw new Error(`Video is '${snippet.liveBroadcastContent}', not 'live'. Visualizer only works for ACTIVE livestreams.`);
+                // Note: Sometimes API returns 'none' or 'upcoming'
+                if (snippet && snippet.liveBroadcastContent === 'none') {
+                     throw new Error("Stream is OFFLINE (liveBroadcastContent: none).");
                 }
 
                 if (details && details.activeLiveChatId) {
+                    console.log("Found Active LiveChat ID:", details.activeLiveChatId);
                     return details.activeLiveChatId;
                 } else {
                     throw new Error("No active live chat found. Is the video live?");
@@ -185,13 +199,14 @@ class YouTubeClient {
             console.error("Error fetching Live Chat ID:", error);
             if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
                 const domain = window.location.hostname;
-                throw new Error(`Network/CORS Error: Check API Key restrictions. Ensure '${domain}' is added to "Website Restrictions" in Google Cloud Console.`);
+                throw new Error(`Network error OR API key referrer restriction. Ensure '${domain}' is allowed in Google Cloud Console.`);
             }
             throw error;
         }
     }
 
     async fetchMessages(liveChatId, pageToken = '') {
+        console.log("Fetching messages for Chat ID:", liveChatId);
         let url = `${this.baseUrl}/liveChatMessages?part=snippet,authorDetails&liveChatId=${liveChatId}&key=${this.apiKey}`;
         if (pageToken) {
             url += `&pageToken=${pageToken}`;
@@ -199,14 +214,17 @@ class YouTubeClient {
 
         try {
             const response = await fetch(url);
+            console.log("Chat API Response Status:", response.status);
 
             if (!response.ok) {
-                if (response.status === 404) {
-                     // 404 on liveChatMessages usually means stream ended or chat closed
-                     throw new Error("Live Stream Ended (Chat Not Found). Stopping.");
-                }
                 if (response.status === 403) {
-                     throw new Error("API Quota Exceeded or Forbidden.");
+                     throw new Error("API key invalid OR HTTP referrer restriction in Google Cloud Console.");
+                }
+                if (response.status === 404) {
+                     throw new Error("Stream offline OR invalid liveChatId.");
+                }
+                if (response.status === 400) {
+                     throw new Error("Invalid request parameters.");
                 }
                 const errData = await response.json().catch(() => ({}));
                 throw new Error(errData.error?.message || `API Error: ${response.status} ${response.statusText}`);
@@ -227,7 +245,7 @@ class YouTubeClient {
             console.error("Error fetching messages:", error);
             if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
                  const domain = window.location.hostname;
-                 throw new Error(`Network/CORS Error: Stream offline OR API Key restricts '${domain}'. Check Google Cloud Console.`);
+                 throw new Error(`Network error OR API key referrer restriction. Ensure '${domain}' is allowed in Google Cloud Console.`);
             }
             throw error;
         }
@@ -994,16 +1012,23 @@ function setupUI() {
 
                     dataManager.processMessages(result.messages);
 
+                    // Update state
                     pageToken = result.nextPageToken;
-                    const delay = result.pollingIntervalMillis || 5000;
+
+                    // STRICT Polling Interval Logic
+                    let delay = result.pollingIntervalMillis;
+                    if (!delay || delay < 1000) delay = 5000; // Safety default
 
                     statusDiv.textContent = `LIVE: ${result.messages.length} msgs. Next: ${delay/1000}s`;
 
                     pollingInterval = setTimeout(poll, delay);
                 } catch (err) {
-                    console.error(err);
+                    console.error("Polling Error:", err);
                     statusDiv.textContent = "ERROR: " + err.message;
                     statusDiv.style.color = "red";
+
+                    // Decide if we should retry or stop based on error type
+                    // For now, retry slower (10s)
                     pollingInterval = setTimeout(poll, 10000);
                 }
             };
