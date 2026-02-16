@@ -751,9 +751,11 @@ function setupUI() {
     const savedUrl = localStorage.getItem('backend_url');
     if (savedUrl && inputBackend) inputBackend.value = savedUrl;
 
-    btnToggle.addEventListener('click', () => {
-        panel.classList.toggle('hidden');
-    });
+    if (btnToggle) {
+        btnToggle.addEventListener('click', () => {
+            panel.classList.toggle('hidden');
+        });
+    }
 
     btnFake.addEventListener('click', () => {
         statusDiv.textContent = "MODE: DEMO (FAKE DATA)";
