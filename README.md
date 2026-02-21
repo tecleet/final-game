@@ -1,8 +1,22 @@
 # Cyberpunk YouTube Stream Visualizer
 
-## Important: How to Run This App
+## 🚀 Quick Start (Mac)
 
-This application uses a **Backend Architecture** to securely handle API keys and avoid CORS issues.
+**Double-click `run_mac.command` to start!**
+
+This script will automatically:
+1.  Check for Node.js (required).
+2.  Install backend dependencies.
+3.  Start the backend server.
+4.  Launch the frontend in your browser.
+
+> **Note:** To connect to real YouTube live chats, you must configure your API Key in `backend/.env`. Without it, you can only use **DEMO MODE**.
+
+---
+
+## Manual Setup (Windows / Linux / Advanced)
+
+If you are not on a Mac or prefer manual control, follow these steps.
 
 ### 1. Setup the Backend (Node.js)
 
@@ -45,6 +59,6 @@ Click "DEMO MODE" to see the visualizer in action with fake data (Matrix theme) 
 
 ## Troubleshooting
 
--   **"WebSocket Connection Failed":** Ensure `node server.js` is running in the `backend` folder.
+-   **"WebSocket Connection Failed":** Ensure the backend server is running on port 3000.
 -   **"Stream Offline":** The video ID must be a live broadcast, not a past recording.
 -   **Images not loading:** The app fetches random animal avatars from Unsplash. If they fail, check your internet connection.
