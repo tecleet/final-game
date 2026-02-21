@@ -133,7 +133,7 @@ class WebSocketClient {
         this.statusCallback = statusCallback;
     }
 
-    connect(videoId) {
+    connect(videoId, apiKey) {
         if (this.ws) {
             this.ws.close();
         }
@@ -147,7 +147,7 @@ class WebSocketClient {
 
         this.ws.onopen = () => {
             this.statusCallback("Connected to Backend...", false);
-            this.ws.send(JSON.stringify({ type: 'CONNECT', videoId: videoId }));
+            this.ws.send(JSON.stringify({ type: 'CONNECT', videoId: videoId, apiKey: apiKey }));
         };
 
         this.ws.onmessage = (event) => {
@@ -744,6 +744,7 @@ function setupUI() {
     const btnFake = document.getElementById('btn-fake');
     const inputVideoId = document.getElementById('video-id');
     const inputBackend = document.getElementById('backend-url');
+    const inputApiKey = document.getElementById('api-key');
     const statusDiv = document.getElementById('status');
     const panel = document.querySelector('.panel');
     const btnToggle = document.getElementById('btn-toggle-ui');
@@ -777,6 +778,7 @@ function setupUI() {
         btnConnect.addEventListener('click', () => {
             const videoId = inputVideoId.value.trim();
             const backendUrl = inputBackend.value.trim();
+            const apiKey = inputApiKey ? inputApiKey.value.trim() : '';
 
             if (!videoId || !backendUrl) {
                 statusDiv.textContent = "ERROR: Missing ID or URL";
@@ -800,7 +802,7 @@ function setupUI() {
             };
 
             wsClient = new WebSocketClient(backendUrl, updateStatus);
-            wsClient.connect(videoId);
+            wsClient.connect(videoId, apiKey);
         });
     }
 }
