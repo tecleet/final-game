@@ -98,7 +98,9 @@ wss.on('connection', (ws) => {
 
                 try {
                     let chatUrl = `https://www.googleapis.com/youtube/v3/liveChatMessages?part=snippet,authorDetails&liveChatId=${liveChatId}&key=${apiKey}`;
-                    if (pageToken) chatUrl += `&pageToken=${pageToken}`;
+                    if (pageToken && pageToken.length > 0) {
+                        chatUrl += `&pageToken=${pageToken}`;
+                    }
 
                     const chatRes = await axios.get(chatUrl);
 
