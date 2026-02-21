@@ -55,6 +55,12 @@ wss.on('connection', (ws) => {
         if (pollingInterval) clearTimeout(pollingInterval);
     });
 
+    ws.on('error', (err) => {
+        console.error('WebSocket Error:', err);
+        isActive = false;
+        if (pollingInterval) clearTimeout(pollingInterval);
+    });
+
     // --- Polling Logic ---
     async function startPolling(ws, videoId, apiKey) {
         // 1. Fetch Live Chat ID
@@ -118,8 +124,8 @@ wss.on('connection', (ws) => {
                     let errorMsg = "Unknown Error";
                     if (err.response) {
                         if (err.response.status === 403) errorMsg = "API Quota Exceeded or Forbidden.";
-                        else if (err.response.status === 404) errorMsg = "Stream Offline or Chat Closed.";
-                        else if (err.response.status === 400) errorMsg = "Invalid Request Token.";
+                        else if (err.response.status === 404) errorMsg = "Stream Offline or Chat Disabled. Is the video Live?";
+                        else if (err.response.status === 400) errorMsg = "Invalid Request. Check API Key or Video ID.";
                         else errorMsg = `API Error ${err.response.status}`;
                     } else {
                         errorMsg = err.message;
