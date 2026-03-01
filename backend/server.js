@@ -32,12 +32,17 @@ wss.on('connection', (ws) => {
         try {
             const data = JSON.parse(message);
             if (data.type === 'CONNECT') {
-                if (!API_KEY || API_KEY === 'YOUR_API_KEY_HERE') {
-                    ws.send(JSON.stringify({ type: 'error', message: 'Server API Key not configured.' }));
+                let apiKey = API_KEY;
+                if ((!apiKey || apiKey === 'YOUR_API_KEY_HERE') && data.apiKey) {
+                    apiKey = data.apiKey;
+                }
+
+                if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
+                    ws.send(JSON.stringify({ type: 'error', message: 'Server API Key not configured. Please set it in .env or provide it in the UI.' }));
                     return;
                 }
 
-                await startPolling(ws, data.videoId);
+                await startPolling(ws, data.videoId, apiKey);
             }
         } catch (err) {
             console.error('Message error:', err);
@@ -50,13 +55,19 @@ wss.on('connection', (ws) => {
         if (pollingInterval) clearTimeout(pollingInterval);
     });
 
+    ws.on('error', (err) => {
+        console.error('WebSocket Error:', err);
+        isActive = false;
+        if (pollingInterval) clearTimeout(pollingInterval);
+    });
+
     // --- Polling Logic ---
-    async function startPolling(ws, videoId) {
+    async function startPolling(ws, videoId, apiKey) {
         // 1. Fetch Live Chat ID
         ws.send(JSON.stringify({ type: 'status', message: 'Fetching Live Stream Details...' }));
 
         try {
-            const videoUrl = `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails,snippet&id=${videoId}&key=${API_KEY}`;
+            const videoUrl = `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails,snippet&id=${videoId}&key=${apiKey}`;
             const vidRes = await axios.get(videoUrl);
 
             if (!vidRes.data.items || vidRes.data.items.length === 0) {
@@ -86,8 +97,10 @@ wss.on('connection', (ws) => {
                 if (!isActive) return;
 
                 try {
-                    let chatUrl = `https://www.googleapis.com/youtube/v3/liveChatMessages?part=snippet,authorDetails&liveChatId=${liveChatId}&key=${API_KEY}`;
-                    if (pageToken) chatUrl += `&pageToken=${pageToken}`;
+                    let chatUrl = `https://www.googleapis.com/youtube/v3/liveChatMessages?part=snippet,authorDetails&liveChatId=${liveChatId}&key=${apiKey}`;
+                    if (pageToken && pageToken.length > 0) {
+                        chatUrl += `&pageToken=${pageToken}`;
+                    }
 
                     const chatRes = await axios.get(chatUrl);
 
@@ -113,8 +126,8 @@ wss.on('connection', (ws) => {
                     let errorMsg = "Unknown Error";
                     if (err.response) {
                         if (err.response.status === 403) errorMsg = "API Quota Exceeded or Forbidden.";
-                        else if (err.response.status === 404) errorMsg = "Stream Offline or Chat Closed.";
-                        else if (err.response.status === 400) errorMsg = "Invalid Request Token.";
+                        else if (err.response.status === 404) errorMsg = "Stream Offline or Chat Disabled. Is the video Live?";
+                        else if (err.response.status === 400) errorMsg = "Invalid Request. Check API Key or Video ID.";
                         else errorMsg = `API Error ${err.response.status}`;
                     } else {
                         errorMsg = err.message;
